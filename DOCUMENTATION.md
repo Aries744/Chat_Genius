@@ -3,15 +3,19 @@
 ## Project Structure
 ```
 project/
-├── public/               # Public assets and client-side code
-│   ├── uploads/         # File upload storage
-│   ├── app.js          # Client-side JavaScript
-│   ├── index.html      # Main HTML file
-│   └── style.css       # CSS styles
-├── server.js            # Main server file
-├── package.json         # Project dependencies
-├── .env                 # Environment variables
-└── .gitignore          # Git ignore rules
+├── docs/                # Documentation files
+├── lib/                 # Library code
+├── prisma/             # Prisma schema and migrations
+│   └── schema.prisma   # Database schema
+├── public/             # Public assets and client-side code
+│   ├── uploads/        # File upload storage
+│   ├── app.js         # Client-side JavaScript
+│   ├── index.html     # Main HTML file
+│   └── style.css      # CSS styles
+├── server.js           # Main server file
+├── package.json        # Project dependencies
+├── .env               # Environment variables
+└── .gitignore         # Git ignore rules
 ```
 
 ## Core Components
@@ -172,6 +176,7 @@ model Channel {
 ```env
 PORT=3000
 JWT_SECRET=your-secret-key-change-in-production
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/chatapp?schema=public"
 ```
 
 ## Dependencies
@@ -231,7 +236,6 @@ JWT_SECRET=your-secret-key-change-in-production
 - Secure websocket connections
 
 ## Limitations
-- In-memory storage (no persistence)
 - Basic error handling
 - No message encryption
 - No user profiles
@@ -239,11 +243,10 @@ JWT_SECRET=your-secret-key-change-in-production
 - No rate limiting
 
 ## Future Improvements
-1. Add persistent database
-2. Implement message encryption
-3. Add user profiles
-4. Add message editing/deletion
-5. Implement rate limiting
-6. Add file type validation
-7. Add backup system
-8. Add user roles and permissions 
+1. Implement message encryption
+2. Add user profiles
+3. Add message editing/deletion
+4. Implement rate limiting
+5. Add file type validation
+6. Add backup system
+7. Add user roles and permissions 

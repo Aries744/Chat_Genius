@@ -2,6 +2,11 @@
 
 A lightweight Slack-like messaging application for work communication.
 
+## Prerequisites
+- Node.js v16 or higher
+- PostgreSQL v14 or higher
+- npm or yarn package manager
+
 ## Features
 - Real-time messaging with Socket.IO
 - User authentication with JWT
@@ -19,18 +24,27 @@ npm install
 
 2. Set up PostgreSQL:
 ```bash
-# Start PostgreSQL service
+# Start PostgreSQL service (MacOS)
 brew services start postgresql@14
+# or for Linux
+sudo service postgresql start
+# or for Windows
+# Start PostgreSQL through the Windows Services application
 
 # Create database
 createdb chatapp
 
-# Initialize database schema
+# Initialize database schema and generate Prisma client
 npx prisma migrate dev
 ```
 
 3. Configure environment:
-- Copy `.env.example` to `.env`
+- Copy `.env.example` to `.env` (if it doesn't exist, create it with the following content):
+```env
+PORT=3000
+JWT_SECRET=your-secret-key-change-in-production
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/chatapp?schema=public"
+```
 - Update database connection string if needed
 
 4. Start the server:
