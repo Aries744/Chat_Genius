@@ -193,9 +193,35 @@ app.post('/upload', upload.single('file'), (req, res) => {
     }
 });
 
+// Initialize database with general channel
+async function initializeDatabase() {
+    try {
+        const generalChannel = await prisma.channel.findFirst({
+            where: { name: 'general' }
+        });
+
+        if (!generalChannel) {
+            console.log('Creating general channel...');
+            await prisma.channel.create({
+                data: {
+                    name: 'general',
+                    type: 'channel'
+                }
+            });
+            console.log('General channel created successfully');
+        } else {
+            console.log('General channel already exists');
+        }
+    } catch (error) {
+        console.error('Error initializing database:', error);
+    }
+}
+
 // Socket.IO event handlers
 io.on('connection', async (socket) => {
     try {
+        console.log('User connected:', socket.username);
+        
         // Join user's channels
         const userChannels = await prisma.channelUser.findMany({
             where: { userId: socket.userId },
@@ -203,50 +229,127 @@ io.on('connection', async (socket) => {
         });
 
         userChannels.forEach(({ channel }) => {
+            console.log('User joining channel:', channel.name, channel.id);
             socket.join(channel.id);
         });
 
-        // Send initial channel list and messages
+        // Get all channels the user has access to
         const channels = await prisma.channel.findMany({
             where: {
-                users: {
-                    some: { userId: socket.userId }
-                }
+                OR: [
+                    { type: 'channel' },
+                    {
+                        users: {
+                            some: { userId: socket.userId }
+                        }
+                    }
+                ]
             }
         });
 
-        socket.emit('initialize', {
-            channels,
-            currentUser: {
-                id: socket.userId,
-                username: socket.username
-            }
+        // Get messages for the general channel
+        const generalChannel = await prisma.channel.findFirst({
+            where: { name: 'general' }
         });
+
+        if (generalChannel) {
+            console.log('Found general channel:', generalChannel.id);
+            
+            // Ensure user is member of general channel
+            const isMember = await prisma.channelUser.findFirst({
+                where: {
+                    userId: socket.userId,
+                    channelId: generalChannel.id
+                }
+            });
+
+            if (!isMember) {
+                console.log('Adding user to general channel');
+                await prisma.channelUser.create({
+                    data: {
+                        userId: socket.userId,
+                        channelId: generalChannel.id
+                    }
+                });
+                socket.join(generalChannel.id);
+            }
+
+            const messages = await prisma.message.findMany({
+                where: { channelId: generalChannel.id },
+                include: {
+                    user: true,
+                    reactions: {
+                        include: { user: true }
+                    }
+                },
+                orderBy: { createdAt: 'asc' },
+                take: 50
+            });
+
+            console.log('Sending initial messages:', messages.length);
+            
+            socket.emit('initialize', {
+                channels,
+                currentUser: {
+                    id: socket.userId,
+                    username: socket.username
+                },
+                messages: messages.map(msg => ({
+                    ...msg,
+                    username: msg.user.username,
+                    reactions: msg.reactions.reduce((acc, reaction) => {
+                        if (!acc[reaction.emoji]) {
+                            acc[reaction.emoji] = [];
+                        }
+                        acc[reaction.emoji].push(reaction.user.username);
+                        return acc;
+                    }, {})
+                }))
+            });
+        }
 
         // Message handling
         socket.on('chat message', async (msg) => {
             try {
+                console.log('Received message:', msg);
+                
+                // Verify user has access to channel
+                const channelAccess = await prisma.channelUser.findFirst({
+                    where: {
+                        userId: socket.userId,
+                        channelId: msg.channelId
+                    }
+                });
+
+                if (!channelAccess) {
+                    console.error('User does not have access to channel');
+                    return;
+                }
+
                 const message = await prisma.message.create({
                     data: {
                         text: msg.text,
                         userId: socket.userId,
-                        channelId: msg.channelId,
-                        parentId: msg.parentId,
-                        fileUrl: msg.fileUrl,
-                        fileType: msg.fileType,
-                        fileName: msg.fileName
+                        channelId: msg.channelId
                     },
                     include: {
-                        user: true
+                        user: true,
+                        reactions: true
                     }
                 });
 
+                console.log('Created message:', message);
+
+                const formattedMessage = {
+                    ...message,
+                    username: message.user.username,
+                    reactions: {}
+                };
+
+                console.log('Broadcasting message to channel:', msg.channelId);
                 io.to(msg.channelId).emit('chat message', {
                     channelId: msg.channelId,
-                    message: {
-                        ...message,
-                        username: message.user.username
-                    }
+                    message: formattedMessage
                 });
             } catch (error) {
                 console.error('Error handling message:', error);
@@ -354,30 +457,6 @@ io.on('connection', async (socket) => {
         console.error('Socket connection error:', error);
     }
 });
-
-// Initialize database with general channel
-async function initializeDatabase() {
-    try {
-        const generalChannel = await prisma.channel.findFirst({
-            where: { name: 'general' }
-        });
-
-        if (!generalChannel) {
-            console.log('Creating general channel...');
-            await prisma.channel.create({
-                data: {
-                    name: 'general',
-                    isDirectMessage: false
-                }
-            });
-            console.log('General channel created successfully');
-        } else {
-            console.log('General channel already exists');
-        }
-    } catch (error) {
-        console.error('Error initializing database:', error);
-    }
-}
 
 // Start server
 const PORT = process.env.PORT || 3000;

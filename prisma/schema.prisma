@@ -20,13 +20,12 @@ model User {
 }
 
 model Channel {
-  id              String        @id @default(uuid())
-  name            String
-  isDirectMessage Boolean       @default(false)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  users           ChannelUser[]
-  messages        Message[]
+  id       String   @id @default(uuid())
+  name     String   @unique
+  type     String   @default("channel")  // 'channel' or 'dm'
+  messages Message[]
+  users    ChannelUser[]
+  createdAt DateTime @default(now())
 }
 
 model ChannelUser {

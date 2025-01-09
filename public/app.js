@@ -1,5 +1,6 @@
 let socket = null;
-let currentChannel = 'general';
+let currentChannel = null;  // Will store the channel ID
+let currentChannelName = 'general';  // Store the channel name separately
 let currentUser = null;
 let allUsers = []; // Store all users for search
 let currentThreadId = null;
@@ -97,9 +98,22 @@ function setupSocketListeners() {
 
     socket.on('initialize', (data) => {
         currentUser = data.currentUser;
-        allUsers = data.users;
+        
+        // Find the general channel and set it as current
+        const generalChannel = data.channels.find(ch => ch.name === 'general');
+        if (generalChannel) {
+            currentChannel = generalChannel.id;
+            currentChannelName = 'general';
+            console.log('Set current channel:', currentChannel);
+        }
+        
         updateChannelsList(data.channels);
-        updateUsersList(data.users);
+        
+        // Display initial messages if any
+        if (data.messages) {
+            document.getElementById('messages').innerHTML = '';
+            data.messages.forEach(addMessage);
+        }
     });
 
     socket.on('previous messages', (data) => {
@@ -110,6 +124,7 @@ function setupSocketListeners() {
     });
 
     socket.on('chat message', (data) => {
+        console.log('Received message:', data);
         if (data.channelId === currentChannel) {
             addMessage(data.message);
             // Scroll to bottom on new message
@@ -157,7 +172,14 @@ function setupSocketListeners() {
 function updateChannelsList(channels) {
     const channelsList = document.getElementById('channels-list');
     channelsList.innerHTML = '';
-    channels.forEach(addChannel);
+    channels.forEach(channel => {
+        const channelElement = document.createElement('div');
+        channelElement.className = `channel ${channel.id === currentChannel ? 'active' : ''}`;
+        channelElement.dataset.channelId = channel.id;
+        channelElement.onclick = () => switchChannel(channel.id, channel.name);
+        channelElement.textContent = `# ${channel.name}`;
+        channelsList.appendChild(channelElement);
+    });
 }
 
 function addChannel(channel) {
@@ -186,18 +208,17 @@ function updateUsersList(users) {
         });
 }
 
-function switchChannel(channelId) {
+function switchChannel(channelId, channelName) {
     clearSearchHighlights();
+    currentChannel = channelId;
+    currentChannelName = channelName;
+    
     // Update UI
     document.querySelectorAll('.channel').forEach(ch => {
-        ch.classList.toggle('active', ch.textContent.includes(channelId));
+        ch.classList.toggle('active', ch.dataset.channelId === channelId);
     });
-    document.getElementById('current-channel').textContent = `# ${channelId}`;
+    document.getElementById('current-channel').textContent = `# ${channelName}`;
     document.getElementById('messages').innerHTML = '';
-    
-    // Switch channel
-    currentChannel = channelId;
-    socket.emit('join channel', channelId);
 }
 
 function startDirectMessage(user) {
@@ -236,7 +257,8 @@ function logout() {
         socket.disconnect();
         socket = null;
     }
-    currentChannel = 'general';
+    currentChannel = null;
+    currentChannelName = 'general';
     currentUser = null;
     document.getElementById('auth-screen').style.display = 'block';
     document.getElementById('chat-screen').style.display = 'none';
@@ -249,22 +271,12 @@ document.getElementById('message-form').addEventListener('submit', (e) => {
     const input = document.getElementById('message-input');
     const message = input.value.trim();
     
-    if (message && socket) {
-        if (currentChannel.includes('-')) {
-            // Direct message
-            const [user1, user2] = currentChannel.split('-');
-            const targetUserId = user1 === currentUser.id ? user2 : user1;
-            socket.emit('direct message', {
-                targetUserId,
-                text: message
-            });
-        } else {
-            // Channel message
-            socket.emit('chat message', {
-                channelId: currentChannel,
-                text: message
-            });
-        }
+    if (message && socket && currentChannel) {
+        console.log('Sending message to channel:', currentChannel);
+        socket.emit('chat message', {
+            channelId: currentChannel,
+            text: message
+        });
         input.value = '';
     }
 });
@@ -275,57 +287,26 @@ function formatTime(isoString) {
 }
 
 function addMessage(message) {
+    console.log('Adding message:', message);
     const messagesDiv = document.getElementById('messages');
     const messageElement = document.createElement('div');
     messageElement.className = 'message';
     messageElement.dataset.messageId = message.id;
 
-    // Check if it's a file message
-    if (message.text.startsWith('[FILE]')) {
-        const fileName = message.text.replace('[FILE] ', '');
-        const fileExtension = fileName.split('.').pop().toUpperCase();
-        const fileIcon = getFileIcon(fileExtension);
-        
-        messageElement.innerHTML = `
-            <span class="user">${message.user}</span>
-            <span class="time">${formatTime(message.time)}</span>
-            <div class="file-message">
-                <div class="file-icon" title="${fileExtension}">${fileIcon}</div>
-                <a href="${message.fileUrl}" target="_blank" download>
-                    ${fileName}
-                    <span class="file-size">${message.fileSize || ''}</span>
-                </a>
-            </div>
-            <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
-            <div class="message-reactions"></div>
-            <div class="message-actions">
-                <button class="thread-btn" onclick="openThread('${message.id}')">
-                    ${message.replies?.length ? `${message.replies.length} replies` : 'Reply in thread'}
-                </button>
-            </div>
-        `;
-    } else {
-        messageElement.innerHTML = `
-            <span class="user">${message.user}</span>
-            <span class="time">${formatTime(message.time)}</span>
-            <div class="text">${message.text}</div>
-            <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
-            <div class="message-reactions"></div>
-            <div class="message-actions">
-                <button class="thread-btn" onclick="openThread('${message.id}')">
-                    ${message.replies?.length ? `${message.replies.length} replies` : 'Reply in thread'}
-                </button>
-            </div>
-        `;
-    }
+    const username = message.username || message.user?.username || message.user;
+    const time = message.createdAt || message.time;
 
-    // Don't append if it's a reply and we're not in a thread
-    if (!message.parentId || message.id === currentThreadId) {
-        messagesDiv.appendChild(messageElement);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
+    messageElement.innerHTML = `
+        <span class="user">${username}</span>
+        <span class="time">${formatTime(time)}</span>
+        <div class="text">${message.text}</div>
+        <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
+        <div class="message-reactions"></div>
+    `;
 
-    // Update reactions if any exist
+    messagesDiv.appendChild(messageElement);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
     if (message.reactions) {
         updateMessageReactions(message.id, message.reactions);
     }
