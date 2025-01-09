@@ -1,379 +1,387 @@
-require('dotenv').config();
-const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
-const jwt = require('jsonwebtoken');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+import express from 'express';
+import { Server } from 'socket.io';
+import { createServer } from 'http';
+import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import prisma from './lib/prisma.js';
+import bcrypt from 'bcryptjs';
 
-// Middleware
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const app = express();
+const server = createServer(app);
+const io = new Server(server);
+
 app.use(express.json());
 app.use(express.static('public'));
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
-// Create uploads directory if it doesn't exist
-const uploadDir = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Configure multer for file uploads
+// File upload configuration
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir);
+    destination: (req, file, cb) => {
+        cb(null, 'public/uploads/');
     },
-    filename: function (req, file, cb) {
-        // Keep original filename but make it safe
-        const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + safeName);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
     }
 });
 
 const upload = multer({
     storage: storage,
-    limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB limit
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'application/pdf',
+            'text/plain'
+        ];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type'));
+        }
     }
 });
 
-// In-memory storage
-const messages = new Map(); // channelId/userId -> messages
-const users = new Map();    // userId -> user
-const channels = new Map(); // channelId -> channel
-const onlineUsers = new Set(); // Track online users
+// Authentication middleware
+io.use(async (socket, next) => {
+    try {
+        const token = socket.handshake.auth.token;
+        if (!token) return next(new Error('Authentication error'));
 
-// Initialize default channel
-channels.set('general', {
-    id: 'general',
-    name: 'general',
-    type: 'channel'
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.userId }
+        });
+        
+        if (!user) return next(new Error('User not found'));
+        
+        socket.userId = user.id;
+        socket.username = user.username;
+        next();
+    } catch (error) {
+        next(new Error('Authentication error'));
+    }
 });
 
-// Authentication Routes
+// Registration endpoint
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password } = req.body;
         
-        // Check if user exists
-        if (Array.from(users.values()).some(u => u.username === username)) {
-            return res.status(400).json({ message: 'Username already exists' });
+        const existingUser = await prisma.user.findUnique({
+            where: { username }
+        });
+        
+        if (existingUser) {
+            return res.status(400).json({ message: 'Username already taken' });
         }
 
-        // Create new user
-        const userId = Date.now().toString();
-        const user = { id: userId, username, password, isGuest: false };
-        users.set(userId, user);
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = await prisma.user.create({
+            data: {
+                username,
+                password: hashedPassword,
+                isGuest: false
+            }
+        });
 
-        // Generate token
-        const token = jwt.sign({ userId }, 'your-secret-key');
-        res.json({ token, username });
+        // Add user to general channel
+        const generalChannel = await prisma.channel.findFirst({
+            where: { name: 'general' }
+        });
+
+        if (generalChannel) {
+            await prisma.channelUser.create({
+                data: {
+                    userId: user.id,
+                    channelId: generalChannel.id
+                }
+            });
+        }
+
+        const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
+        res.json({ token, username: user.username });
     } catch (error) {
+        console.error('Registration error:', error);
         res.status(500).json({ message: 'Error creating user' });
     }
 });
 
+// Login endpoint
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         
-        // Find user
-        const user = Array.from(users.values()).find(u => 
-            u.username === username && u.password === password && !u.isGuest
-        );
-        
-        if (!user) {
+        const user = await prisma.user.findUnique({
+            where: { username }
+        });
+
+        if (!user || user.isGuest) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        // Generate token
-        const token = jwt.sign({ userId: user.id }, 'your-secret-key');
-        res.json({ token, username });
+        const validPassword = await bcrypt.compare(password, user.password);
+        if (!validPassword) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
+        res.json({ token, username: user.username });
     } catch (error) {
+        console.error('Login error:', error);
         res.status(500).json({ message: 'Error logging in' });
     }
 });
 
+// Guest access endpoint
 app.post('/api/guest', async (req, res) => {
     try {
         const { username } = req.body;
-        const userId = Date.now().toString();
         
-        // Create temporary guest user
-        const guestUser = {
-            id: userId,
-            username: `guest_${username}`,
-            isGuest: true
-        };
-        users.set(userId, guestUser);
+        const user = await prisma.user.create({
+            data: {
+                username: `guest_${username}`,
+                isGuest: true
+            }
+        });
 
-        // Generate temporary token
-        const token = jwt.sign({ userId }, 'your-secret-key', { expiresIn: '24h' });
-        res.json({ token, username: guestUser.username });
+        // Add guest to general channel
+        const generalChannel = await prisma.channel.findFirst({
+            where: { name: 'general' }
+        });
+
+        if (generalChannel) {
+            await prisma.channelUser.create({
+                data: {
+                    userId: user.id,
+                    channelId: generalChannel.id
+                }
+            });
+        }
+
+        const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token, username: user.username });
     } catch (error) {
+        console.error('Guest access error:', error);
         res.status(500).json({ message: 'Error creating guest user' });
     }
 });
 
-// Socket.IO Authentication
-io.use((socket, next) => {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-        return next(new Error('Authentication error'));
-    }
-
-    jwt.verify(token, 'your-secret-key', (err, decoded) => {
-        if (err) return next(new Error('Authentication error'));
-        socket.userId = decoded.userId;
-        next();
-    });
-});
-
-io.on('connection', (socket) => {
-    console.log('User connected');
-    const user = users.get(socket.userId);
-    
-    // If no valid user is found, disconnect
-    if (!user) {
-        socket.disconnect();
-        return;
-    }
-
-    // Mark user as online
-    onlineUsers.add(socket.userId);
-    
-    // Join the general channel by default
-    socket.join('general');
-    
-    // Send initial data to the user with ALL users, not just online ones
-    socket.emit('initialize', {
-        channels: Array.from(channels.values()),
-        users: Array.from(users.values())
-            .filter(u => !u.isGuest || onlineUsers.has(u.id)) // Only include online guest users
-            .map(u => ({
-                id: u.id,
-                username: u.username,
-                isGuest: u.isGuest,
-                isOnline: onlineUsers.has(u.id)
-            })),
-        currentUser: user
-    });
-
-    // Also notify everyone about the new user if they're not already in the list
-    if (!user.isGuest) {
-        socket.broadcast.emit('user joined', {
-            id: user.id,
-            username: user.username,
-            isGuest: user.isGuest,
-            isOnline: true
-        });
-    }
-
-    // Broadcast user status to others
-    socket.broadcast.emit('user status', {
-        userId: socket.userId,
-        isOnline: true
-    });
-
-    // Send channel history
-    if (messages.has('general')) {
-        socket.emit('previous messages', {
-            channelId: 'general',
-            messages: messages.get('general')
-        });
-    }
-
-    // Handle channel creation
-    socket.on('create channel', (channelName) => {
-        const channelId = channelName.toLowerCase().replace(/\s+/g, '-');
-        if (!channels.has(channelId)) {
-            channels.set(channelId, {
-                id: channelId,
-                name: channelName,
-                type: 'channel'
-            });
-            io.emit('channel created', channels.get(channelId));
-        }
-    });
-
-    // Handle joining channels
-    socket.on('join channel', (channelId) => {
-        socket.join(channelId);
-        if (messages.has(channelId)) {
-            socket.emit('previous messages', {
-                channelId,
-                messages: messages.get(channelId)
-            });
-        }
-    });
-
-    // Handle new messages
-    socket.on('chat message', async (msg) => {
-        try {
-            const user = users.get(socket.userId);
-            if (!user) return;
-
-            const message = {
-                id: Date.now().toString(),
-                text: msg.text,
-                user: user.username,
-                time: new Date().toISOString(),
-                reactions: {},
-                fileUrl: msg.fileUrl,
-                fileType: msg.fileType,
-                parentId: msg.parentId || null, // Add parent message ID for threads
-                replies: [] // Store reply IDs
-            };
-
-            // Store message in appropriate channel/DM
-            const channelId = msg.channelId || 'general';
-            if (!messages.has(channelId)) {
-                messages.set(channelId, []);
-            }
-            const channelMessages = messages.get(channelId);
-
-            // If this is a reply, add it to parent message's replies
-            if (message.parentId) {
-                const parentMessage = channelMessages.find(m => m.id === message.parentId);
-                if (parentMessage) {
-                    parentMessage.replies.push(message.id);
-                }
-            }
-
-            channelMessages.push(message);
-            
-            // Keep only last 50 root messages (not replies)
-            if (channelMessages.length > 50) {
-                const rootMessages = channelMessages.filter(m => !m.parentId);
-                if (rootMessages.length > 50) {
-                    const oldestRootMessage = rootMessages[0];
-                    // Remove oldest root message and all its replies
-                    const toRemove = new Set([oldestRootMessage.id, ...oldestRootMessage.replies]);
-                    messages.set(channelId, channelMessages.filter(m => !toRemove.has(m.id)));
-                }
-            }
-
-            // Broadcast to appropriate room
-            io.to(channelId).emit('chat message', {
-                channelId,
-                message
-            });
-
-            // If this is a reply, also emit a thread update
-            if (message.parentId) {
-                io.to(channelId).emit('thread_updated', {
-                    parentId: message.parentId,
-                    reply: message
-                });
-            }
-        } catch (error) {
-            console.error('Error handling message:', error);
-        }
-    });
-
-    // Handle direct messages
-    socket.on('direct message', (data) => {
-        const { targetUserId, text } = data;
-        const dmChannelId = [socket.userId, targetUserId].sort().join('-');
-        
-        const message = {
-            id: Date.now().toString(),
-            text,
-            user: user.username,
-            time: new Date().toISOString()
-        };
-
-        // Store DM
-        if (!messages.has(dmChannelId)) {
-            messages.set(dmChannelId, []);
-        }
-        messages.get(dmChannelId).push(message);
-
-        // Make sure both users are in the DM channel
-        socket.join(dmChannelId);
-        const targetSocket = io.sockets.sockets.get(targetUserId);
-        if (targetSocket) {
-            targetSocket.join(dmChannelId);
-        }
-
-        // Broadcast to the DM channel
-        io.to(dmChannelId).emit('chat message', {
-            channelId: dmChannelId,
-            message,
-            isDM: true
-        });
-    });
-
-    // Add reaction handler
-    socket.on('add_reaction', (data) => {
-        const { messageId, reaction, channelId } = data;
-        
-        if (!messages.has(channelId)) return;
-        
-        const channelMessages = messages.get(channelId);
-        const message = channelMessages.find(m => m.id === messageId);
-        
-        if (message) {
-            // Initialize reactions object if it doesn't exist
-            if (!message.reactions) {
-                message.reactions = {};
-            }
-            
-            // Initialize reaction array if it doesn't exist
-            if (!message.reactions[reaction]) {
-                message.reactions[reaction] = [];
-            }
-            
-            // Toggle user's reaction
-            const userIndex = message.reactions[reaction].indexOf(socket.userId);
-            if (userIndex === -1) {
-                message.reactions[reaction].push(socket.userId);
-            } else {
-                message.reactions[reaction].splice(userIndex, 1);
-            }
-            
-            // Remove reaction if no users are using it
-            if (message.reactions[reaction].length === 0) {
-                delete message.reactions[reaction];
-            }
-            
-            // Broadcast reaction update
-            io.to(channelId).emit('reaction_updated', {
-                messageId,
-                reactions: message.reactions
-            });
-        }
-    });
-
-    socket.on('disconnect', () => {
-        console.log('User disconnected');
-        onlineUsers.delete(socket.userId);
-        
-        // Broadcast offline status
-        io.emit('user status', {
-            userId: socket.userId,
-            isOnline: false
-        });
-    });
-});
-
 // File upload endpoint
 app.post('/upload', upload.single('file'), (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ message: 'No file uploaded' });
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const fileUrl = `/uploads/${req.file.filename}`;
+        res.json({
+            url: fileUrl,
+            type: req.file.mimetype,
+            name: req.file.originalname
+        });
+    } catch (error) {
+        console.error('File upload error:', error);
+        res.status(500).json({ error: 'File upload failed' });
     }
-    
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({ 
-        url: fileUrl,
-        filename: req.file.originalname,
-        type: req.file.mimetype
-    });
 });
 
+// Socket.IO event handlers
+io.on('connection', async (socket) => {
+    try {
+        // Join user's channels
+        const userChannels = await prisma.channelUser.findMany({
+            where: { userId: socket.userId },
+            include: { channel: true }
+        });
+
+        userChannels.forEach(({ channel }) => {
+            socket.join(channel.id);
+        });
+
+        // Send initial channel list and messages
+        const channels = await prisma.channel.findMany({
+            where: {
+                users: {
+                    some: { userId: socket.userId }
+                }
+            }
+        });
+
+        socket.emit('initialize', {
+            channels,
+            currentUser: {
+                id: socket.userId,
+                username: socket.username
+            }
+        });
+
+        // Message handling
+        socket.on('chat message', async (msg) => {
+            try {
+                const message = await prisma.message.create({
+                    data: {
+                        text: msg.text,
+                        userId: socket.userId,
+                        channelId: msg.channelId,
+                        parentId: msg.parentId,
+                        fileUrl: msg.fileUrl,
+                        fileType: msg.fileType,
+                        fileName: msg.fileName
+                    },
+                    include: {
+                        user: true
+                    }
+                });
+
+                io.to(msg.channelId).emit('chat message', {
+                    channelId: msg.channelId,
+                    message: {
+                        ...message,
+                        username: message.user.username
+                    }
+                });
+            } catch (error) {
+                console.error('Error handling message:', error);
+            }
+        });
+
+        // Reaction handling
+        socket.on('add reaction', async (data) => {
+            try {
+                const { messageId, emoji } = data;
+
+                const existingReaction = await prisma.reaction.findFirst({
+                    where: {
+                        messageId,
+                        userId: socket.userId,
+                        emoji
+                    }
+                });
+
+                if (existingReaction) {
+                    await prisma.reaction.delete({
+                        where: { id: existingReaction.id }
+                    });
+                } else {
+                    await prisma.reaction.create({
+                        data: {
+                            emoji,
+                            userId: socket.userId,
+                            messageId
+                        }
+                    });
+                }
+
+                const reactions = await prisma.reaction.findMany({
+                    where: { messageId },
+                    include: { user: true }
+                });
+
+                const formattedReactions = reactions.reduce((acc, reaction) => {
+                    if (!acc[reaction.emoji]) {
+                        acc[reaction.emoji] = [];
+                    }
+                    acc[reaction.emoji].push(reaction.user.username);
+                    return acc;
+                }, {});
+
+                io.emit('reaction updated', {
+                    messageId,
+                    reactions: formattedReactions
+                });
+            } catch (error) {
+                console.error('Error handling reaction:', error);
+            }
+        });
+
+        // Thread handling
+        socket.on('get thread', async (data) => {
+            try {
+                const { parentId } = data;
+                const threadMessages = await prisma.message.findMany({
+                    where: { parentId },
+                    include: {
+                        user: true,
+                        reactions: {
+                            include: { user: true }
+                        }
+                    },
+                    orderBy: { createdAt: 'asc' }
+                });
+
+                const formattedMessages = threadMessages.map(message => ({
+                    ...message,
+                    username: message.user.username,
+                    reactions: message.reactions.reduce((acc, reaction) => {
+                        if (!acc[reaction.emoji]) {
+                            acc[reaction.emoji] = [];
+                        }
+                        acc[reaction.emoji].push(reaction.user.username);
+                        return acc;
+                    }, {})
+                }));
+
+                socket.emit('thread messages', {
+                    parentId,
+                    messages: formattedMessages
+                });
+            } catch (error) {
+                console.error('Error getting thread messages:', error);
+            }
+        });
+
+        // Cleanup on disconnect
+        socket.on('disconnect', async () => {
+            if (socket.username.startsWith('guest_')) {
+                try {
+                    await prisma.user.delete({
+                        where: { id: socket.userId }
+                    });
+                } catch (error) {
+                    console.error('Error cleaning up guest user:', error);
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Socket connection error:', error);
+    }
+});
+
+// Initialize database with general channel
+async function initializeDatabase() {
+    try {
+        const generalChannel = await prisma.channel.findFirst({
+            where: { name: 'general' }
+        });
+
+        if (!generalChannel) {
+            console.log('Creating general channel...');
+            await prisma.channel.create({
+                data: {
+                    name: 'general',
+                    isDirectMessage: false
+                }
+            });
+            console.log('General channel created successfully');
+        } else {
+            console.log('General channel already exists');
+        }
+    } catch (error) {
+        console.error('Error initializing database:', error);
+    }
+}
+
+// Start server
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
+server.listen(PORT, async () => {
+    await initializeDatabase();
     console.log(`Server running on port ${PORT}`);
 }); 

@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String        @id @default(uuid())
+  username  String        @unique
+  password  String?
+  isGuest   Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  channels  ChannelUser[]
+  messages  Message[]
+  reactions Reaction[]
+}
+
+model Channel {
+  id              String        @id @default(uuid())
+  name            String
+  isDirectMessage Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  users           ChannelUser[]
+  messages        Message[]
+}
+
+model ChannelUser {
+  id        String   @id @default(uuid())
+  userId    String
+  channelId String
+  joinedAt  DateTime @default(now())
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, channelId])
+}
+
+model Message {
+  id        String     @id @default(uuid())
+  text      String
+  userId    String
+  channelId String
+  parentId  String?
+  fileUrl   String?
+  fileType  String?
+  fileName  String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  channel   Channel    @relation(fields: [channelId], references: [id])
+  parent    Message?   @relation("ThreadReplies", fields: [parentId], references: [id])
+  replies   Message[]  @relation("ThreadReplies")
+  user      User       @relation(fields: [userId], references: [id])
+  reactions Reaction[]
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  emoji     String
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, messageId, emoji])
+}

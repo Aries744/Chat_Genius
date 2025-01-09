@@ -4,9 +4,11 @@ A lightweight Slack-like messaging application for work communication.
 
 ## Features
 - Real-time messaging with Socket.IO
-- Simple username-based authentication
+- User authentication with JWT
+- PostgreSQL database for persistent storage
+- File sharing and uploads
+- Message threading and reactions
 - Clean and responsive interface
-- Message history (last 50 messages)
 
 ## Setup
 
@@ -15,12 +17,45 @@ A lightweight Slack-like messaging application for work communication.
 npm install
 ```
 
-2. Start the server:
+2. Set up PostgreSQL:
+```bash
+# Start PostgreSQL service
+brew services start postgresql@14
+
+# Create database
+createdb chatapp
+
+# Initialize database schema
+npx prisma migrate dev
+```
+
+3. Configure environment:
+- Copy `.env.example` to `.env`
+- Update database connection string if needed
+
+4. Start the server:
 ```bash
 npm start
 ```
 
-3. Open your browser and navigate to `http://localhost:3000`
+5. Open your browser and navigate to `http://localhost:3000`
+
+## Database Management
+
+### View Data
+```bash
+npx prisma studio
+```
+
+### Reset Data
+```bash
+npx prisma migrate reset --force
+```
+
+### Update Schema
+```bash
+npx prisma migrate dev
+```
 
 ## Usage
 1. Enter your name to join the chat
@@ -32,6 +67,9 @@ npm start
 - Node.js
 - Express
 - Socket.IO
+- PostgreSQL
+- Prisma ORM
+- JWT Authentication
 - Vanilla JavaScript (no framework)
 - HTML5 & CSS3 
  
