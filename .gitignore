@@ -38,4 +38,9 @@ Thumbs.db
 .idea
 .vscode
 *.swp
-*.swo 
+*.swo
+
+# AWS Credentials
+aws_credentials.csv
+*aws_credentials*
+.aws/ 
