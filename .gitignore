@@ -43,4 +43,11 @@ Thumbs.db
 # AWS Credentials
 aws_credentials.csv
 *aws_credentials*
-.aws/ 
+.aws/
+
+# SSH Keys
+*.pem
+*.key
+*-key
+*-key.pub
+chat-app-key* 
