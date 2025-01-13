@@ -27,13 +27,159 @@ project/
   - Socket.IO (Real-time communication)
   - JWT (Authentication)
   - Multer (File uploads)
+  - Prisma (Database ORM)
 - **Key Features**:
   - User authentication
   - Real-time messaging
   - File upload handling
   - Channel management
   - Message threading
+  - Thread notifications
   - Emoji reactions
+
+### Message Threading Implementation
+#### Server-Side
+- **Thread Creation**:
+  ```javascript
+  // Message creation with thread support
+  const message = await prisma.message.create({
+      data: {
+          text: msg.text,
+          userId: socket.userId,
+          channelId: msg.channelId,
+          parentId: msg.parentId || null,
+          fileUrl: msg.fileUrl,
+          fileType: msg.fileType
+      },
+      include: {
+          user: true,
+          reactions: true,
+          replies: true
+      }
+  });
+  ```
+
+- **Thread Retrieval**:
+  ```javascript
+  // Get thread messages
+  const threadMessages = await prisma.message.findUnique({
+      where: { id: parentId },
+      include: {
+          user: true,
+          reactions: true,
+          replies: {
+              include: {
+                  user: true,
+                  reactions: true
+              }
+          }
+      }
+  });
+  ```
+
+#### Client-Side
+- **Thread UI**:
+  ```javascript
+  // Thread panel structure
+  <div id="thread-view" class="thread-sidebar">
+      <div class="thread-header">
+          <h3>Thread</h3>
+          <button class="close-thread-btn">×</button>
+      </div>
+      <div class="thread-content">
+          <div id="parent-message"></div>
+          <div id="thread-messages"></div>
+      </div>
+      <form id="thread-message-form">
+          <input type="text" id="thread-message-input">
+          <button type="submit">Reply</button>
+      </form>
+  </div>
+  ```
+
+- **Thread Events**:
+  ```javascript
+  // Open thread
+  socket.emit('get thread', {
+      parentId: messageId,
+      channelId: currentChannel
+  });
+
+  // Send thread reply
+  socket.emit('chat message', {
+      channelId: currentChannel,
+      text: message,
+      parentId: currentThreadId
+  });
+  ```
+
+#### Database Schema
+```prisma
+model Message {
+    id        String     @id @default(uuid())
+    text      String
+    userId    String
+    channelId String
+    parentId  String?    // For thread replies
+    fileUrl   String?
+    fileType  String?
+    createdAt DateTime   @default(now())
+    parent    Message?   @relation("ThreadReplies", fields: [parentId], references: [id])
+    replies   Message[]  @relation("ThreadReplies")
+    user      User       @relation(fields: [userId], references: [id])
+    reactions Reaction[]
+}
+```
+
+### Thread Features
+1. **Thread Creation**
+   - Reply to any message
+   - Support for text and files
+   - Real-time notifications
+
+2. **Thread View**
+   - Dedicated thread panel
+   - Parent message display
+   - Chronological replies
+   - Real-time updates
+
+3. **Thread Interactions**
+   - Emoji reactions
+   - File attachments
+   - Reply count tracking
+   - Participant notifications
+
+4. **Thread Management**
+   - Thread history preservation
+   - Real-time synchronization
+   - Thread participant tracking
+   - Thread status indicators
+
+### Security Considerations
+1. **Access Control**
+   - Thread access verification
+   - Channel membership checks
+   - User authentication
+   - File upload restrictions
+
+2. **Data Protection**
+   - SQL injection prevention
+   - XSS protection
+   - File type validation
+   - Rate limiting
+
+### Performance Optimization
+1. **Database Queries**
+   - Efficient thread loading
+   - Pagination support
+   - Relation preloading
+   - Query optimization
+
+2. **Real-time Updates**
+   - Targeted event emission
+   - Connection pooling
+   - Memory management
+   - Cache utilization
 
 ### 2. Client-Side (`public/`)
 

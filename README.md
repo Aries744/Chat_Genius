@@ -12,8 +12,11 @@ A lightweight Slack-like messaging application for work communication.
 - User authentication with JWT
 - PostgreSQL database for persistent storage
 - File sharing and uploads
-- Message threading and reactions
+- Message threading and replies
+- Emoji reactions
 - Clean and responsive interface
+- Real-time thread notifications
+- Thread history preservation
 
 ## Local Development Setup
 
@@ -152,7 +155,19 @@ npx prisma migrate dev
 1. Enter your name to join the chat
 2. Start sending messages
 3. Messages are updated in real-time for all connected users
-4. The last 50 messages are preserved and shown to new users
+4. Click "Reply in thread" on any message to start or view a thread
+5. Use emoji reactions in both main chat and threads
+6. Share files in messages and thread replies
+7. The last 50 messages are preserved and shown to new users
+
+## Message Threading
+- Reply to any message to create a thread
+- View all replies in a dedicated thread panel
+- Real-time updates for thread replies
+- Emoji reactions in threads
+- File sharing in thread replies
+- Thread reply count indicators
+- Thread notifications for participants
 
 ## Technical Stack
 - Node.js
