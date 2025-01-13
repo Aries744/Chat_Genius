@@ -250,3 +250,93 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/chatapp?schema=publi
 5. Add file type validation
 6. Add backup system
 7. Add user roles and permissions 
+
+## Deployment
+
+### AWS EC2 Deployment
+The application is deployed on AWS EC2 with the following setup:
+
+1. **Server**:
+   - EC2 Instance running Amazon Linux 2023
+   - Node.js v18.x
+   - PostgreSQL 15
+   - PM2 Process Manager
+
+2. **Process Management**:
+   - Using PM2 for application management
+   - Auto-restart on crashes
+   - Auto-start on system reboot
+
+3. **Database**:
+   - PostgreSQL running on the same instance
+   - Database name: chatapp
+   - User: chatapp
+
+4. **Environment Variables**:
+```env
+PORT=3000
+JWT_SECRET=your-production-secret
+DATABASE_URL="postgresql://chatapp:chatapp2024@localhost:5432/chatapp?schema=public"
+```
+
+### Deployment Steps
+1. **Initial Setup**:
+```bash
+# Connect to EC2
+ssh -i deploy2.pem ec2-user@YOUR_IP
+
+# Install dependencies
+sudo dnf update -y
+sudo dnf install -y nodejs postgresql15-server git
+
+# Setup PostgreSQL
+sudo postgresql-setup --initdb
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Clone repository
+git clone https://github.com/Aries744/Chat_Genius.git
+cd Chat_Genius
+
+# Install application dependencies
+npm install
+
+# Install and setup PM2
+sudo npm install -g pm2
+pm2 start server.js --name chat-app
+pm2 startup
+pm2 save
+```
+
+2. **Updating Application**:
+```bash
+# Connect to EC2
+ssh -i deploy2.pem ec2-user@YOUR_IP
+
+# Pull latest changes
+cd Chat_Genius
+git pull
+
+# Install any new dependencies
+npm install
+
+# Restart application
+pm2 restart chat-app
+```
+
+### Security Considerations
+1. **Firewall Rules**:
+   - Port 22 (SSH)
+   - Port 3000 (Application)
+   - Port 5432 (PostgreSQL) - internal only
+
+2. **SSL/HTTPS**:
+   - Currently using HTTP
+   - Consider adding SSL certificate for HTTPS
+
+3. **Database**:
+   - Regular backups recommended
+   - Monitor disk space
+   - Implement cleanup policies
+``` 
+</rewritten_file>

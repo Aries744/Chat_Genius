@@ -15,7 +15,7 @@ A lightweight Slack-like messaging application for work communication.
 - Message threading and reactions
 - Clean and responsive interface
 
-## Setup
+## Local Development Setup
 
 1. Install dependencies:
 ```bash
@@ -53,6 +53,27 @@ npm start
 ```
 
 5. Open your browser and navigate to `http://localhost:3000`
+
+## Production Deployment
+
+The application is deployed on AWS EC2. For detailed deployment instructions, see [DOCUMENTATION.md](DOCUMENTATION.md#deployment).
+
+Quick deployment steps:
+1. Connect to EC2 instance
+2. Clone repository
+3. Install dependencies
+4. Set up PostgreSQL
+5. Configure PM2
+6. Start application
+
+For updating the production application:
+```bash
+ssh -i deploy2.pem ec2-user@YOUR_IP
+cd Chat_Genius
+git pull
+npm install
+pm2 restart chat-app
+```
 
 ## Database Management
 

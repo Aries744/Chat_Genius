@@ -14,6 +14,7 @@ node_modules/
 logs
 *.log
 npm-debug.log*
+output.log
 
 # Runtime data
 pids
@@ -40,17 +41,21 @@ Thumbs.db
 *.swp
 *.swo
 
-# AWS Credentials
+# AWS Credentials and Keys
 aws_credentials.csv
 *aws_credentials*
 .aws/
-
-# SSH Keys
 *.pem
+deploy*.pem
 *.key
 *-key
 *-key.pub
-chat-app-key* 
+chat-app-key*
+
+# PM2 Files
+.pm2/
+ecosystem.config.js
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
