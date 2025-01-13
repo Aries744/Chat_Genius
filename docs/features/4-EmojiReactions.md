@@ -1,55 +1,73 @@
-# Emoji Reactions
+# Emoji Reactions Feature
 
 ## Overview
-The application supports emoji reactions to messages, allowing users to express their emotions or responses to messages using emojis. The feature is available for both channel messages and direct messages.
+The chat application supports emoji reactions to messages, allowing users to express their emotions or responses using a set of common emojis. The feature works in both main chat and thread replies, with real-time updates across all connected clients.
 
 ## Implementation
 
-### 1. Server-Side (`server.js`)
+### 1. Database Schema
+```prisma
+model Reaction {
+    id        String   @id @default(uuid())
+    emoji     String
+    userId    String
+    messageId String
+    user      User     @relation(fields: [userId], references: [id])
+    message   Message  @relation(fields: [messageId], references: [id])
+    createdAt DateTime @default(now())
+}
+```
+
+### 2. Server-Side (`server.js`)
 ```javascript
 // Reaction handling
 socket.on('add reaction', async (data) => {
     try {
-        const { messageId, channelId, emoji } = data;
-        const user = users.get(socket.userId);
-        if (!user) return;
+        const { messageId, emoji } = data;
 
-        // Get channel messages
-        const channelMessages = messages.get(channelId);
-        if (!channelMessages) return;
-
-        // Find message and update reactions
-        const message = channelMessages.find(m => m.id === messageId);
-        if (!message) return;
-
-        // Initialize reactions object if needed
-        if (!message.reactions) {
-            message.reactions = {};
-        }
-        if (!message.reactions[emoji]) {
-            message.reactions[emoji] = new Set();
-        }
-
-        // Toggle user's reaction
-        const userReactions = message.reactions[emoji];
-        if (userReactions.has(user.username)) {
-            userReactions.delete(user.username);
-            if (userReactions.size === 0) {
-                delete message.reactions[emoji];
+        // Check for existing reaction
+        const existingReaction = await prisma.reaction.findFirst({
+            where: {
+                messageId,
+                userId: socket.userId,
+                emoji
             }
+        });
+
+        // Toggle reaction
+        if (existingReaction) {
+            await prisma.reaction.delete({
+                where: { id: existingReaction.id }
+            });
         } else {
-            userReactions.add(user.username);
+            await prisma.reaction.create({
+                data: {
+                    emoji,
+                    userId: socket.userId,
+                    messageId
+                }
+            });
         }
 
-        // Broadcast reaction update
-        io.to(channelId).emit('reaction updated', {
+        // Get updated reactions
+        const reactions = await prisma.reaction.findMany({
+            where: { messageId },
+            include: { user: true }
+        });
+
+        // Format reactions for client
+        const formattedReactions = reactions.reduce((acc, reaction) => {
+            if (!acc[reaction.emoji]) {
+                acc[reaction.emoji] = [];
+            }
+            acc[reaction.emoji].push(reaction.user.username);
+            return acc;
+        }, {});
+
+        // Broadcast update
+        io.emit('reaction_updated', {
             messageId,
-            reactions: Object.fromEntries(
-                Object.entries(message.reactions).map(([emoji, users]) => [
-                    emoji,
-                    Array.from(users)
-                ])
-            )
+            reactions: formattedReactions
         });
     } catch (error) {
         console.error('Error handling reaction:', error);
@@ -57,42 +75,36 @@ socket.on('add reaction', async (data) => {
 });
 ```
 
-### 2. Client-Side (`public/app.js`)
+### 3. Client-Side (`public/app.js`)
 ```javascript
+// Common emojis available for quick reactions
+const commonEmojis = ['👍', '❤️', '😊', '😂', '🎉', '👏', '🚀', '💯'];
+
 // Emoji picker initialization
-const emojiPicker = new EmojiPicker({
-    onSelect: (emoji) => {
-        if (currentMessageId) {
-            addReaction(currentMessageId, emoji);
-        }
-        hideEmojiPicker();
-    }
-});
+const emojiPicker = document.createElement('div');
+emojiPicker.className = 'emoji-picker';
+emojiPicker.innerHTML = commonEmojis.map(emoji => 
+    `<button class="emoji-btn" data-emoji="${emoji}">${emoji}</button>`
+).join('');
+document.body.appendChild(emojiPicker);
 
 // Show emoji picker
 function showEmojiPicker(messageId, event) {
-    currentMessageId = messageId;
-    const picker = document.getElementById('emoji-picker');
-    picker.style.display = 'block';
-    picker.style.left = `${event.clientX}px`;
-    picker.style.top = `${event.clientY}px`;
+    const rect = event.target.getBoundingClientRect();
+    emojiPicker.style.top = `${rect.bottom + 5}px`;
+    emojiPicker.style.left = `${rect.left}px`;
+    emojiPicker.dataset.messageId = messageId;
+    emojiPicker.classList.add('show');
+    event.stopPropagation();
 }
 
-// Hide emoji picker
-function hideEmojiPicker() {
-    document.getElementById('emoji-picker').style.display = 'none';
-    currentMessageId = null;
-}
-
-// Add reaction
-function addReaction(messageId, emoji) {
-    if (socket) {
-        socket.emit('add reaction', {
-            messageId,
-            channelId: currentChannel,
-            emoji
-        });
-    }
+// Toggle reaction
+function toggleReaction(messageId, emoji) {
+    socket.emit('add reaction', {
+        messageId,
+        emoji,
+        channelId: currentChannel
+    });
 }
 
 // Update message reactions
@@ -100,179 +112,75 @@ function updateMessageReactions(messageId, reactions) {
     const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
     if (!messageElement) return;
 
-    const reactionsDiv = messageElement.querySelector('.message-reactions');
-    reactionsDiv.innerHTML = '';
+    const reactionsContainer = messageElement.querySelector('.message-reactions');
+    if (!reactionsContainer) return;
 
-    Object.entries(reactions).forEach(([emoji, users]) => {
-        const reactionElement = document.createElement('span');
-        reactionElement.className = 'reaction';
-        reactionElement.innerHTML = `
-            ${emoji} <span class="reaction-count">${users.length}</span>
+    reactionsContainer.innerHTML = Object.entries(reactions).map(([emoji, users]) => {
+        const isActive = users.includes(currentUser.username);
+        return `
+            <div class="reaction ${isActive ? 'active' : ''}" 
+                 onclick="toggleReaction('${messageId}', '${emoji}')">
+                ${emoji} ${users.length}
+            </div>
         `;
-        reactionElement.title = users.join(', ');
-        reactionElement.onclick = () => addReaction(messageId, emoji);
-        reactionsDiv.appendChild(reactionElement);
-    });
+    }).join('');
 }
-
-// Listen for reaction updates
-socket.on('reaction updated', (data) => {
-    updateMessageReactions(data.messageId, data.reactions);
-});
-```
-
-### 3. HTML Structure (`public/index.html`)
-```html
-<!-- Emoji picker container -->
-<div id="emoji-picker" class="emoji-picker" style="display: none;">
-    <!-- Emoji categories -->
-    <div class="emoji-categories">
-        <button onclick="showCategory('smileys')">😊</button>
-        <button onclick="showCategory('people')">👋</button>
-        <button onclick="showCategory('nature')">🌺</button>
-        <button onclick="showCategory('food')">🍔</button>
-        <button onclick="showCategory('activities')">⚽</button>
-        <button onclick="showCategory('travel')">🚗</button>
-        <button onclick="showCategory('objects')">💡</button>
-        <button onclick="showCategory('symbols')">❤️</button>
-        <button onclick="showCategory('flags')">🏁</button>
-    </div>
-    <!-- Emoji grid -->
-    <div class="emoji-grid"></div>
-</div>
-
-<!-- Message reaction button -->
-<button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">
-    😊
-</button>
 ```
 
 ## Features
 
-### 1. Emoji Selection
-- Multiple emoji categories
-- Frequently used emojis
-- Emoji search
-- Custom emoji support
-- Emoji picker UI
+### 1. Core Functionality
+- Toggle reactions on/off
+- Real-time updates across all clients
+- Reaction counts per emoji
+- Visual feedback for user's own reactions
+- Support in both main chat and threads
 
-### 2. Reaction Display
-- Reaction counts
-- User lists on hover
-- Animated reactions
-- Reaction grouping
-- Real-time updates
+### 2. User Interface
+- Quick access to common emojis
+- Hover-to-show reaction button
+- Click-to-toggle reactions
+- Active state for user's reactions
+- Reaction count display
 
-### 3. User Interaction
-- Toggle reactions
-- Multiple reactions per message
-- Reaction removal
-- Quick reaction options
-- Reaction history
+### 3. Data Management
+- Persistent storage in PostgreSQL
+- Real-time synchronization
+- Efficient updates using WebSocket
+- User-specific reaction tracking
 
-### 4. Management
-- Reaction limits
-- Abuse prevention
-- Performance optimization
-- Data consistency
+## Security Considerations
 
-## Reaction Flow
+### 1. Access Control
+- User authentication required
+- Rate limiting for reactions
+- Validation of emoji input
+- Channel membership verification
 
-1. **Adding Reaction**
-   ```
-   User clicks reaction button
-   ↓
-   Emoji picker shown
-   ↓
-   User selects emoji
-   ↓
-   Client sends reaction
-   ↓
-   Server processes reaction
-   ↓
-   Server updates message
-   ↓
-   Server broadcasts update
-   ↓
-   All users see new reaction
-   ```
-
-2. **Removing Reaction**
-   ```
-   User clicks existing reaction
-   ↓
-   Client sends removal
-   ↓
-   Server removes reaction
-   ↓
-   Server updates message
-   ↓
-   Server broadcasts update
-   ↓
-   All users see removal
-   ```
-
-## Storage Management
-
-1. **Reaction Storage**
-   - In-memory storage
-   - User-based tracking
-   - Efficient updates
-   - Data consistency
-
-2. **Performance**
-   - Optimized updates
-   - Batched broadcasts
-   - Memory management
-   - Cache utilization
-
-## Limitations
-
-1. **Storage**
-   - In-memory only
-   - No persistence
-   - Limited history
-   - No analytics
-
-2. **Features**
-   - Limited emoji set
-   - No custom emojis
-   - No reaction search
-   - No reaction trends
-
-3. **Performance**
-   - Single server
-   - No caching
-   - Limited scaling
-   - Memory constraints
+### 2. Data Integrity
+- Unique reactions per user/emoji/message
+- Proper database constraints
+- Error handling and recovery
+- Safe emoji handling
 
 ## Future Improvements
 
-1. **Features**
-   - Custom emoji support
-   - Reaction analytics
-   - Trending reactions
-   - Reaction search
-   - Reaction suggestions
-   - Reaction animations
+### 1. Features
+- Custom emoji support
+- Emoji categories
+- Reaction search
+- Reaction analytics
+- Trending reactions
 
-2. **Performance**
-   - Reaction caching
-   - Optimized storage
-   - Batch processing
-   - Load balancing
-   - Memory optimization
+### 2. Performance
+- Reaction caching
+- Batch updates
+- Optimized queries
+- Load balancing
 
-3. **User Experience**
-   - Better emoji picker
-   - Keyboard shortcuts
-   - Reaction categories
-   - Quick reactions
-   - Reaction history
-
-4. **Analytics**
-   - Usage tracking
-   - Popular reactions
-   - User preferences
-   - Trend analysis
-   - Performance metrics 
+### 3. User Experience
+- Extended emoji picker
+- Reaction animations
+- Keyboard shortcuts
+- Mobile optimization
+- Accessibility improvements 

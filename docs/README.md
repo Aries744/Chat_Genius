@@ -1,13 +1,14 @@
 # Chat Application Documentation
 
 ## Overview
-This documentation provides a comprehensive guide to the chat application's features, implementation details, and future improvements. The application is built using Node.js, Express, and Socket.IO, providing real-time messaging capabilities with various features like user authentication, file sharing, emoji reactions, and message threading.
+This documentation provides a comprehensive guide to the chat application's features, implementation details, and future improvements. The application is built using Node.js, Express, Socket.IO, and PostgreSQL with Prisma ORM, providing real-time messaging capabilities with various features like user authentication, file sharing, emoji reactions, and message threading.
 
 ## Core Technologies
 - **Node.js**: Server-side JavaScript runtime
 - **Express**: Web application framework
 - **Socket.IO**: Real-time bidirectional event-based communication
-- **MongoDB**: Database for user authentication (optional)
+- **PostgreSQL**: Primary database
+- **Prisma**: Database ORM
 - **Multer**: File upload handling
 
 ## Features
@@ -17,7 +18,7 @@ This documentation provides a comprehensive guide to the chat application's feat
 - Guest access
 - JWT-based authentication
 - Session management
-- Password hashing
+- Password hashing with bcrypt
 
 ### 2. [Real-Time Messaging](features/2-RealTimeMessaging.md)
 - Channel messages
@@ -29,16 +30,16 @@ This documentation provides a comprehensive guide to the chat application's feat
 ### 3. [File Sharing](features/3-FileSharing.md)
 - Multiple file types support
 - Image previews
-- File size limits
+- File size limits (5MB)
 - Secure storage
 - Download management
 
 ### 4. [Emoji Reactions](features/4-EmojiReactions.md)
-- Multiple emoji categories
-- Reaction counts
-- User lists
-- Real-time updates
-- Quick reactions
+- Quick access to common emojis
+- Real-time reaction updates
+- Reaction counts with user lists
+- Toggle reactions on/off
+- Persistent storage in PostgreSQL
 
 ### 5. [Message Threading](features/5-MessageThreading.md)
 - Thread creation
@@ -55,6 +56,9 @@ This documentation provides a comprehensive guide to the chat application's feat
 ├── .env                   # Environment variables
 ├── .gitignore            # Git ignore rules
 ├── README.md             # Project readme
+├── prisma/               # Database schema and migrations
+│   ├── schema.prisma     # Prisma schema
+│   └── migrations/       # Database migrations
 ├── docs/                 # Documentation
 │   ├── README.md         # This file
 │   └── features/         # Feature documentation
@@ -63,7 +67,6 @@ This documentation provides a comprehensive guide to the chat application's feat
 │       ├── 3-FileSharing.md
 │       ├── 4-EmojiReactions.md
 │       └── 5-MessageThreading.md
-├── models/               # Data models
 ├── public/              # Client-side files
 │   ├── index.html       # Main HTML file
 │   ├── app.js          # Client JavaScript

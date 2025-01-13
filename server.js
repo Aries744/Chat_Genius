@@ -459,7 +459,7 @@ io.on('connection', async (socket) => {
                     return acc;
                 }, {});
 
-                io.emit('reaction updated', {
+                io.emit('reaction_updated', {
                     messageId,
                     reactions: formattedReactions
                 });

@@ -156,6 +156,7 @@ function setupSocketListeners() {
     });
 
     socket.on('reaction_updated', (data) => {
+        console.log('Reaction updated:', data);
         updateMessageReactions(data.messageId, data.reactions);
     });
 
@@ -531,9 +532,9 @@ emojiPicker.addEventListener('click', (e) => {
     const messageId = emojiPicker.dataset.messageId;
     
     if (messageId && emoji) {
-        socket.emit('add_reaction', {
+        socket.emit('add reaction', {
             messageId,
-            reaction: emoji,
+            emoji,
             channelId: currentChannel
         });
     }
@@ -556,7 +557,8 @@ function updateMessageReactions(messageId, reactions) {
     if (!reactionsContainer) return;
 
     reactionsContainer.innerHTML = Object.entries(reactions).map(([emoji, users]) => {
-        const isActive = users.includes(currentUser.id);
+        // Check if the current user's username is in the users array
+        const isActive = users.includes(currentUser.username);
         return `
             <div class="reaction ${isActive ? 'active' : ''}" 
                  onclick="toggleReaction('${messageId}', '${emoji}')">
@@ -567,9 +569,9 @@ function updateMessageReactions(messageId, reactions) {
 }
 
 function toggleReaction(messageId, emoji) {
-    socket.emit('add_reaction', {
+    socket.emit('add reaction', {
         messageId,
-        reaction: emoji,
+        emoji,
         channelId: currentChannel
     });
 }
