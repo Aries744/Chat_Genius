@@ -62,7 +62,25 @@ The application uses PostgreSQL with Prisma ORM:
 
 ## Production Deployment
 
-1. SSH access: `ssh -i deployment/keys/deploy2.pem ubuntu@[EC2-IP]`
+### EC2 SSH Access
+- Key location: `deployment/keys/deploy2.pem`
+- Key permissions: `400` (read-only for owner)
+- Default user: `ec2-user` (for Amazon Linux 2023)
+- Command format:
+  ```bash
+  ssh -i deployment/keys/deploy2.pem ec2-user@[EC2-IP]
+  ```
+
+Note: The default user varies by EC2 AMI:
+- Amazon Linux 2023: `ec2-user`
+- Ubuntu: `ubuntu`
+- Amazon Linux 2: `ec2-user`
+- RHEL: `ec2-user`
+- SUSE: `ec2-user`
+- Debian: `admin`
+- Fedora: `fedora`
+
+1. SSH access: `ssh -i deployment/keys/deploy2.pem ec2-user@[EC2-IP]`
 2. Environment setup: Copy and configure `.env`
 3. Database setup: `npx prisma migrate deploy`
 4. Process management: PM2 for application lifecycle

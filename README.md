@@ -60,7 +60,7 @@ chat_genius/
 1. SSH into your EC2 instance:
    ```bash
    # SSH key should be in deployment/keys/ with 400 permissions
-   ssh -i deployment/keys/deploy2.pem ubuntu@[EC2-IP]
+   ssh -i deployment/keys/deploy2.pem ec2-user@[EC2-IP]
    ```
 
 2. Clone and set up the application:
