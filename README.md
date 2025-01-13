@@ -56,23 +56,79 @@ npm start
 
 ## Production Deployment
 
-The application is deployed on AWS EC2. For detailed deployment instructions, see [DOCUMENTATION.md](DOCUMENTATION.md#deployment).
+The application is deployed on AWS EC2. Follow these steps for deployment:
 
-Quick deployment steps:
-1. Connect to EC2 instance
-2. Clone repository
-3. Install dependencies
-4. Set up PostgreSQL
-5. Configure PM2
-6. Start application
-
-For updating the production application:
+### Initial Setup
+1. SSH into your EC2 instance:
 ```bash
-ssh -i deploy2.pem ec2-user@YOUR_IP
-cd Chat_Genius
+ssh -i your-key.pem ec2-user@YOUR_EC2_IP
+```
+
+2. Install required software:
+```bash
+# Update system packages
+sudo yum update -y
+
+# Install Node.js
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+. ~/.nvm/nvm.sh
+nvm install 16
+
+# Install PostgreSQL
+sudo yum install postgresql postgresql-server postgresql-devel postgresql-contrib postgresql-docs
+sudo postgresql-setup initdb
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+3. Clone and setup the application:
+```bash
+git clone https://github.com/yourusername/chat-genius.git
+cd chat-genius
+npm install
+```
+
+4. Configure PostgreSQL:
+```bash
+sudo -u postgres psql
+CREATE DATABASE chatapp;
+\q
+```
+
+5. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with production values
+nano .env
+```
+
+6. Setup PM2 for process management:
+```bash
+npm install pm2 -g
+pm2 start server.js --name chat-app
+pm2 startup
+pm2 save
+```
+
+### Updating the Application
+To update the running application:
+```bash
+cd ~/chat-genius
 git pull
 npm install
 pm2 restart chat-app
+```
+
+### Monitoring
+```bash
+# View logs
+pm2 logs chat-app
+
+# Monitor application
+pm2 monit
+
+# View application status
+pm2 status
 ```
 
 ## Database Management

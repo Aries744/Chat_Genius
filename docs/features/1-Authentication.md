@@ -194,15 +194,25 @@ function logout() {
    - Secure token generation
    - Token verification on each request
    - Token expiration for guest users
+   - Secure storage in production environment
 
 2. **Password Handling**
    - Server-side validation
-   - Basic password storage (Note: needs hashing in production)
+   - Password hashing using bcrypt
+   - Secure transmission over HTTPS
 
 3. **Error Handling**
    - Graceful error responses
    - User-friendly error messages
    - Failed authentication handling
+   - Rate limiting on production
+
+4. **Production Security**
+   - HTTPS/SSL encryption
+   - Secure headers configuration
+   - AWS security groups
+   - Regular security updates
+   - Protected environment variables
 
 ## Limitations
 

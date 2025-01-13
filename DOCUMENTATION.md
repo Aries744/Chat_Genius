@@ -339,4 +339,100 @@ pm2 restart chat-app
    - Monitor disk space
    - Implement cleanup policies
 ``` 
+
+## Deployment Infrastructure
+
+### AWS EC2 Setup
+- **Instance Type**: t2.micro (or larger based on load)
+- **Operating System**: Amazon Linux 2
+- **Security Groups**:
+  - HTTP (80) - For web traffic
+  - HTTPS (443) - For secure web traffic
+  - SSH (22) - For server access
+  - Custom TCP (3000) - For application port
+
+### Process Management
+- **PM2**:
+  - Manages application lifecycle
+  - Handles crashes and restarts
+  - Provides monitoring and logs
+  - Ensures application starts on system reboot
+
+### Database
+- **PostgreSQL**:
+  - Running on EC2 instance
+  - Port: 5432
+  - Configured with environment variables
+  - Regular backups recommended
+
+### Environment Configuration
+```env
+PORT=3000
+JWT_SECRET=your-production-secret-key
+DATABASE_URL="postgresql://postgres:your-password@localhost:5432/chatapp?schema=public"
+NODE_ENV=production
+```
+
+### Backup Strategy
+1. **Database Backups**
+```bash
+# Create backup
+pg_dump -U postgres chatapp > backup.sql
+
+# Restore from backup
+psql -U postgres chatapp < backup.sql
+```
+
+2. **Application Data**
+- Regular backups of `/public/uploads`
+- Environment variable backup
+- PM2 configuration backup
+
+### Monitoring
+1. **Application Monitoring**
+```bash
+# View application status
+pm2 status
+
+# Monitor CPU/Memory
+pm2 monit
+
+# View logs
+pm2 logs chat-app
+```
+
+2. **System Monitoring**
+```bash
+# View system resources
+top
+htop  # if installed
+
+# View disk space
+df -h
+
+# View memory usage
+free -m
+```
+
+### Security Considerations
+1. **Firewall Rules**
+   - Restrict SSH access to known IPs
+   - Use security groups effectively
+   - Keep ports minimal and necessary
+
+2. **SSL/TLS**
+   - Configure SSL certificate
+   - Force HTTPS redirects
+   - Secure WebSocket connections
+
+3. **Database Security**
+   - Regular security updates
+   - Strong passwords
+   - Restricted network access
+
+4. **File Permissions**
+   - Secure upload directory
+   - Proper file ownership
+   - Limited execution permissions
+``` 
 </rewritten_file>

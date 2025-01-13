@@ -55,8 +55,3 @@ chat-app-key*
 # PM2 Files
 .pm2/
 ecosystem.config.js
-
-# Elastic Beanstalk Files
-.elasticbeanstalk/*
-!.elasticbeanstalk/*.cfg.yml
-!.elasticbeanstalk/*.global.yml

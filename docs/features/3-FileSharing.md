@@ -302,3 +302,26 @@ function addFileMessage(message) {
    - Encryption
    - Watermarking
    - Audit logging 
+
+## File Storage
+
+### Production Environment (EC2)
+- Files stored in `/public/uploads/` directory
+- Regular backups to prevent data loss
+- Disk space monitoring
+- Proper file permissions
+- Optional: Consider using S3 for scalability
+
+### Storage Management
+- Automatic cleanup of old files
+- Size limits per file (5MB)
+- Allowed file types
+- Virus scanning (recommended)
+- Disk space monitoring
+
+### Security
+- File type validation
+- Secure file names
+- Access control
+- Regular security scans
+- Protected upload directory 
