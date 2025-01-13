@@ -326,15 +326,26 @@ io.on('connection', async (socket) => {
                     return;
                 }
 
+                // Create the message with thread support
                 const message = await prisma.message.create({
                     data: {
                         text: msg.text,
                         userId: socket.userId,
-                        channelId: msg.channelId
+                        channelId: msg.channelId,
+                        parentId: msg.parentId || null,  // Support for thread replies
+                        fileUrl: msg.fileUrl,
+                        fileType: msg.fileType,
+                        fileName: msg.fileName
                     },
                     include: {
                         user: true,
-                        reactions: true
+                        reactions: true,
+                        replies: {
+                            include: {
+                                user: true,
+                                reactions: true
+                            }
+                        }
                     }
                 });
 
@@ -343,8 +354,32 @@ io.on('connection', async (socket) => {
                 const formattedMessage = {
                     ...message,
                     username: message.user.username,
-                    reactions: {}
+                    reactions: {},
+                    replyCount: message.replies.length
                 };
+
+                // If this is a thread reply, notify about thread update
+                if (msg.parentId) {
+                    const parentMessage = await prisma.message.findUnique({
+                        where: { id: msg.parentId },
+                        include: {
+                            replies: {
+                                include: {
+                                    user: true,
+                                    reactions: true
+                                }
+                            }
+                        }
+                    });
+
+                    if (parentMessage) {
+                        io.to(msg.channelId).emit('thread_updated', {
+                            parentId: msg.parentId,
+                            replyCount: parentMessage.replies.length,
+                            reply: formattedMessage
+                        });
+                    }
+                }
 
                 console.log('Broadcasting message to channel:', msg.channelId);
                 io.to(msg.channelId).emit('chat message', {
@@ -408,29 +443,57 @@ io.on('connection', async (socket) => {
         // Thread handling
         socket.on('get thread', async (data) => {
             try {
-                const { parentId } = data;
-                const threadMessages = await prisma.message.findMany({
-                    where: { parentId },
+                const { parentId, channelId } = data;
+                
+                // Get parent message with its replies
+                const threadMessages = await prisma.message.findUnique({
+                    where: { id: parentId },
                     include: {
                         user: true,
                         reactions: {
                             include: { user: true }
+                        },
+                        replies: {
+                            include: {
+                                user: true,
+                                reactions: {
+                                    include: { user: true }
+                                }
+                            },
+                            orderBy: { createdAt: 'asc' }
                         }
-                    },
-                    orderBy: { createdAt: 'asc' }
+                    }
                 });
 
-                const formattedMessages = threadMessages.map(message => ({
-                    ...message,
-                    username: message.user.username,
-                    reactions: message.reactions.reduce((acc, reaction) => {
-                        if (!acc[reaction.emoji]) {
-                            acc[reaction.emoji] = [];
-                        }
-                        acc[reaction.emoji].push(reaction.user.username);
-                        return acc;
-                    }, {})
-                }));
+                if (!threadMessages) {
+                    console.error('Thread parent message not found');
+                    return;
+                }
+
+                const formattedMessages = {
+                    parent: {
+                        ...threadMessages,
+                        username: threadMessages.user.username,
+                        reactions: threadMessages.reactions.reduce((acc, reaction) => {
+                            if (!acc[reaction.emoji]) {
+                                acc[reaction.emoji] = [];
+                            }
+                            acc[reaction.emoji].push(reaction.user.username);
+                            return acc;
+                        }, {})
+                    },
+                    replies: threadMessages.replies.map(reply => ({
+                        ...reply,
+                        username: reply.user.username,
+                        reactions: reply.reactions.reduce((acc, reaction) => {
+                            if (!acc[reaction.emoji]) {
+                                acc[reaction.emoji] = [];
+                            }
+                            acc[reaction.emoji].push(reaction.user.username);
+                            return acc;
+                        }, {})
+                    }))
+                };
 
                 socket.emit('thread messages', {
                     parentId,

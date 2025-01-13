@@ -167,6 +167,21 @@ function setupSocketListeners() {
         // Update reply count in main view
         updateThreadIndicator(data.parentId);
     });
+
+    // Update thread message handler
+    socket.on('thread messages', (data) => {
+        if (data.parentId !== currentThreadId) return;
+
+        const threadMessages = document.getElementById('thread-messages');
+        threadMessages.innerHTML = ''; // Clear existing messages
+        
+        // Display replies
+        data.messages.replies.forEach(message => {
+            addThreadMessage(message);
+        });
+        
+        threadMessages.scrollTop = threadMessages.scrollHeight;
+    });
 }
 
 function updateChannelsList(channels) {
@@ -287,26 +302,40 @@ function formatTime(isoString) {
 }
 
 function addMessage(message) {
-    console.log('Adding message:', message);
     const messagesDiv = document.getElementById('messages');
     const messageElement = document.createElement('div');
     messageElement.className = 'message';
     messageElement.dataset.messageId = message.id;
-
-    const username = message.username || message.user?.username || message.user;
-    const time = message.createdAt || message.time;
-
+    
     messageElement.innerHTML = `
-        <span class="user">${username}</span>
-        <span class="time">${formatTime(time)}</span>
+        <span class="user">${message.username}</span>
+        <span class="time">${formatTime(message.createdAt)}</span>
         <div class="text">${message.text}</div>
+        ${message.fileUrl ? `
+            <div class="file-attachment">
+                ${message.fileType?.startsWith('image/') 
+                    ? `<img src="${message.fileUrl}" alt="Attached image" class="message-image">`
+                    : `<a href="${message.fileUrl}" target="_blank" class="file-link">
+                        <i class="file-icon"></i> ${message.fileName}
+                       </a>`
+                }
+            </div>
+        ` : ''}
         <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
         <div class="message-reactions"></div>
+        <div class="message-actions">
+            <button class="thread-btn" onclick="openThread('${message.id}')">
+                ${message.replyCount ? `${message.replyCount} ${message.replyCount === 1 ? 'reply' : 'replies'}` : 'Reply in thread'}
+            </button>
+        </div>
     `;
-
-    messagesDiv.appendChild(messageElement);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
+    
+    // Only add to main chat if it's not a thread reply
+    if (!message.parentId) {
+        messagesDiv.appendChild(messageElement);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
     if (message.reactions) {
         updateMessageReactions(message.id, message.reactions);
     }
@@ -560,7 +589,8 @@ function showEmojiPicker(messageId, event) {
 
 function openThread(messageId) {
     const threadView = document.getElementById('thread-view');
-    const parentMessage = document.querySelector(`[data-message-id="${messageId}"]`).cloneNode(true);
+    const parentMessage = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!parentMessage) return;
     
     // Clear previous thread messages
     document.getElementById('thread-messages').innerHTML = '';
@@ -572,17 +602,20 @@ function openThread(messageId) {
     threadView.style.display = 'flex';
     
     // Display parent message
-    document.getElementById('parent-message').innerHTML = parentMessage.innerHTML;
+    const parentMessageDiv = document.getElementById('parent-message');
+    parentMessageDiv.innerHTML = '';
+    parentMessageDiv.className = 'message parent-message';
+    parentMessageDiv.innerHTML = `
+        <span class="user">${parentMessage.querySelector('.user').textContent}</span>
+        <span class="time">${parentMessage.querySelector('.time').textContent}</span>
+        <div class="text">${parentMessage.querySelector('.text').textContent}</div>
+        <div class="message-reactions">${parentMessage.querySelector('.message-reactions').innerHTML}</div>
+    `;
     
     // Get thread messages
-    const channelMessages = Array.from(document.querySelectorAll('.message'));
-    const threadMessages = channelMessages.filter(msg => 
-        msg.dataset.parentId === messageId
-    );
-    
-    // Display thread messages
-    threadMessages.forEach(msg => {
-        addThreadMessage(JSON.parse(msg.dataset.messageData));
+    socket.emit('get thread', {
+        parentId: messageId,
+        channelId: currentChannel
     });
 }
 
@@ -594,19 +627,28 @@ function closeThread() {
 function addThreadMessage(message) {
     const threadMessages = document.getElementById('thread-messages');
     const messageElement = document.createElement('div');
-    messageElement.className = 'message';
+    messageElement.className = 'message thread-reply';
     messageElement.dataset.messageId = message.id;
     
     messageElement.innerHTML = `
-        <span class="user">${message.user}</span>
-        <span class="time">${formatTime(message.time)}</span>
+        <span class="user">${message.username}</span>
+        <span class="time">${formatTime(message.createdAt)}</span>
         <div class="text">${message.text}</div>
+        ${message.fileUrl ? `
+            <div class="file-attachment">
+                ${message.fileType?.startsWith('image/') 
+                    ? `<img src="${message.fileUrl}" alt="Attached image" class="message-image">`
+                    : `<a href="${message.fileUrl}" target="_blank" class="file-link">
+                        <i class="file-icon"></i> ${message.fileName}
+                       </a>`
+                }
+            </div>
+        ` : ''}
         <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
         <div class="message-reactions"></div>
     `;
     
     threadMessages.appendChild(messageElement);
-    threadMessages.scrollTop = threadMessages.scrollHeight;
     
     if (message.reactions) {
         updateMessageReactions(message.id, message.reactions);

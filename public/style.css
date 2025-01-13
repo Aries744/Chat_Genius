@@ -399,64 +399,154 @@ button:hover {
 }
 
 .thread-sidebar {
-    width: 320px;
-    border-left: 1px solid #eee;
-    display: none;
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 300px;
+    background: #fff;
+    border-left: 1px solid #e1e1e1;
+    display: flex;
     flex-direction: column;
-    background: white;
+    z-index: 1000;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
 }
 
 .thread-header {
-    padding: 15px 20px;
-    border-bottom: 1px solid #eee;
+    padding: 15px;
+    border-bottom: 1px solid #e1e1e1;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: #f8f9fa;
 }
 
 .thread-header h3 {
-    color: #2c3e50;
-    font-size: 16px;
     margin: 0;
+    font-size: 16px;
+    color: #1a1a1a;
 }
 
 .close-thread-btn {
     background: none;
     border: none;
-    color: #95a5a6;
-    font-size: 24px;
+    font-size: 20px;
     cursor: pointer;
+    color: #666;
     padding: 0 5px;
-    line-height: 1;
 }
 
 .close-thread-btn:hover {
-    color: #7f8c8d;
+    color: #333;
 }
 
 .thread-content {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
+    padding: 15px;
     display: flex;
     flex-direction: column;
     gap: 15px;
 }
 
-#parent-message {
-    border-left: 3px solid #3498db;
-    padding-left: 12px;
-    margin-bottom: 20px;
+.parent-message {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 15px;
+    border-left: 3px solid #007bff;
 }
 
-#thread-messages {
+.thread-messages {
+    flex: 1;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
+.thread-reply {
+    padding: 8px 12px;
+    margin-left: 15px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #e1e1e1;
+}
+
+.thread-reply:hover {
+    background: #f8f9fa;
+}
+
 #thread-message-form {
     padding: 15px;
-    border-top: 1px solid #eee;
-    background: white;
+    border-top: 1px solid #e1e1e1;
+    background: #fff;
+    display: flex;
+    gap: 10px;
+}
+
+#thread-message-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.message-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 10px;
+}
+
+.thread-btn {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.thread-btn:hover {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.file-attachment {
+    margin-top: 8px;
+    max-width: 100%;
+}
+
+.message-image {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    text-decoration: none;
+    color: #333;
+}
+
+.file-link:hover {
+    background: #e0e0e0;
+}
+
+/* Adjust main chat container when thread is open */
+.chat-container {
+    margin-right: 300px;
+    transition: margin-right 0.3s ease;
+}
+
+.chat-container.thread-closed {
+    margin-right: 0;
 } 
