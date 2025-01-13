@@ -2,160 +2,111 @@
 
 A real-time chat application with features like message threading, file sharing, and emoji reactions.
 
-## Features
+## Project Structure
 
-- Real-time messaging using Socket.IO
-- Message threading and replies
-- File attachments (images, PDFs, documents)
-- Emoji reactions to messages
-- User authentication and guest access
-- Channel-based communication
-- Direct messaging between users
-
-## Tech Stack
-
-- Node.js & Express.js
-- Socket.IO for real-time communication
-- PostgreSQL with Prisma ORM
-- JWT for authentication
-- PM2 for process management
-- AWS EC2 for hosting
+```
+chat_genius/
+├── deployment/           # Project-specific deployment files (gitignored)
+│   ├── keys/            # SSH keys (400 permissions)
+│   └── aws/             # AWS credentials (600 permissions)
+├── docs/                # Detailed documentation
+│   ├── features/        # Feature-specific documentation
+│   └── README.md        # Documentation overview
+├── prisma/              # Database schema and migrations
+├── public/              # Client-side assets and code
+│   └── uploads/         # User uploaded files (gitignored)
+├── .env                 # Environment variables (gitignored)
+├── .env.example         # Template for environment setup
+└── server.js            # Main application file
+```
 
 ## Prerequisites
 
-- Node.js (v16 or higher)
+- Node.js (v14 or higher)
 - PostgreSQL (v14 or higher)
-- npm or yarn
+- PM2 (for production)
 
 ## Local Development Setup
 
 1. Clone the repository:
-```bash
-git clone https://github.com/Aries744/Chat_Genius.git
-cd Chat_Genius
-```
+   ```bash
+   git clone https://github.com/Aries744/Chat_Genius.git
+   cd Chat_Genius
+   ```
 
 2. Install dependencies:
-```bash
-npm install
-```
+   ```bash
+   npm install
+   ```
 
 3. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your database credentials and JWT secret
-```
+   ```bash
+   cp .env.example .env
+   # Edit .env with your values
+   ```
 
 4. Set up the database:
-```bash
-npx prisma migrate dev
-```
+   ```bash
+   npx prisma migrate dev
+   ```
 
 5. Start the development server:
-```bash
-npm start
-```
-
-The application will be available at `http://localhost:3000`.
+   ```bash
+   npm run dev
+   ```
 
 ## Production Deployment (AWS EC2)
 
 1. SSH into your EC2 instance:
-```bash
-ssh -i your-key.pem ec2-user@your-instance-ip
-```
+   ```bash
+   # SSH key should be in deployment/keys/ with 400 permissions
+   ssh -i deployment/keys/deploy2.pem ubuntu@[EC2-IP]
+   ```
 
-2. Install required software:
-```bash
-# Update system
-sudo yum update -y
+2. Clone and set up the application:
+   ```bash
+   git clone https://github.com/Aries744/Chat_Genius.git
+   cd Chat_Genius
+   npm install
+   ```
 
-# Install Node.js
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-source ~/.bashrc
-nvm install 16
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   # Edit .env with production values
+   ```
 
-# Install PostgreSQL
-sudo yum install postgresql14 postgresql14-server
-sudo postgresql-setup initdb
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-```
+4. Set up the database:
+   ```bash
+   npx prisma migrate deploy
+   ```
 
-3. Clone and setup the application:
-```bash
-git clone https://github.com/Aries744/Chat_Genius.git
-cd Chat_Genius
-npm install
-npm install -g pm2
-```
+5. Start with PM2:
+   ```bash
+   pm2 start server.js --name chat-app
+   pm2 save
+   ```
 
-4. Configure PostgreSQL:
-```bash
-sudo -u postgres psql
-CREATE DATABASE chatgenius;
-CREATE USER chatuser WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE chatgenius TO chatuser;
-```
+## Security Notes
 
-5. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with production values
-```
+- Keep `.env` and files in `deployment/` secure and never commit them
+- Maintain proper file permissions:
+  - SSH keys: 400 (read-only for owner)
+  - AWS credentials: 600 (read/write for owner only)
+  - Uploads directory: 755
+- Use HTTPS in production
+- Regularly update dependencies
 
-6. Run database migrations:
-```bash
-npx prisma migrate deploy
-```
+## Features
 
-7. Start the application with PM2:
-```bash
-pm2 start server.js --name chat-genius
-pm2 save
-pm2 startup
-```
-
-## Database Management
-
-To clean the database (remove all data):
-```bash
-node prisma/clean-db.js
-```
-
-To reset the database (clean and recreate):
-```bash
-npx prisma migrate reset
-```
-
-## Monitoring and Logs
-
-View application logs:
-```bash
-pm2 logs chat-genius
-```
-
-Monitor application:
-```bash
-pm2 monit
-```
-
-## Security Considerations
-
-- All passwords are hashed using bcrypt
-- JWT tokens are used for authentication
-- File uploads are restricted by type and size
-- CORS is configured for production
-- Rate limiting is implemented for API endpoints
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+- Real-time messaging
+- Message threading
+- File sharing (images, documents)
+- Emoji reactions
+- User authentication
+- Persistent storage
+- Mobile-responsive design
 
 ## License
 
-This project is licensed under the MIT License. 
+MIT License - see LICENSE file for details 

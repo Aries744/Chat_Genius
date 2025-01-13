@@ -1,233 +1,77 @@
-# Chat Application Documentation
+# Chat Genius Documentation
 
 ## Overview
-This documentation provides a comprehensive guide to the chat application's features, implementation details, and future improvements. The application is built using Node.js, Express, Socket.IO, and PostgreSQL with Prisma ORM, providing real-time messaging capabilities with various features like user authentication, file sharing, emoji reactions, and message threading.
 
-## Core Technologies
-- **Node.js**: Server-side JavaScript runtime
-- **Express**: Web application framework
-- **Socket.IO**: Real-time bidirectional event-based communication
-- **PostgreSQL**: Primary database
-- **Prisma**: Database ORM
-- **Multer**: File upload handling
+This documentation covers the implementation details, features, and setup instructions for the Chat Genius application.
 
-## Features
+## Project Organization
 
-### 1. [Authentication](features/1-Authentication.md)
-- User registration and login
-- Guest access
-- JWT-based authentication
-- Session management
-- Password hashing with bcrypt
+- `docs/features/` - Detailed documentation for each feature:
+  - `1-Authentication.md` - User authentication and session management
+  - `2-RealTimeMessaging.md` - Socket.IO implementation for real-time chat
+  - `3-FileSharing.md` - File upload and sharing functionality
+  - `4-EmojiReactions.md` - Emoji reaction system
+  - `5-MessageThreading.md` - Thread-based conversations
 
-### 2. [Real-Time Messaging](features/2-RealTimeMessaging.md)
-- Channel messages
-- Direct messages
-- Message history
-- Real-time updates
-- Message formatting
+## Environment Setup
 
-### 3. [File Sharing](features/3-FileSharing.md)
-- Multiple file types support
-- Image previews
-- File size limits (5MB)
-- Secure storage
-- Download management
+The application uses two environment files:
+- `.env` - Contains actual configuration values (not committed to git)
+- `.env.example` - Template showing required environment variables
 
-### 4. [Emoji Reactions](features/4-EmojiReactions.md)
-- Quick access to common emojis
-- Real-time reaction updates
-- Reaction counts with user lists
-- Toggle reactions on/off
-- Persistent storage in PostgreSQL
+Required environment variables:
+```bash
+# Database
+DATABASE_URL="postgresql://username:password@localhost:5432/chatapp"
 
-### 5. [Message Threading](features/5-MessageThreading.md)
-- Thread creation
-- Reply tracking
-- Thread notifications
-- Participant management
-- Thread history
+# Server
+PORT=3000
+NODE_ENV=development/production
 
-## Project Structure
-```
-/
-├── server.js              # Main server file
-├── package.json           # Project dependencies
-├── .env                   # Environment variables
-├── .gitignore            # Git ignore rules
-├── README.md             # Project readme
-├── prisma/               # Database schema and migrations
-│   ├── schema.prisma     # Prisma schema
-│   └── migrations/       # Database migrations
-├── docs/                 # Documentation
-│   ├── README.md         # This file
-│   └── features/         # Feature documentation
-│       ├── 1-Authentication.md
-│       ├── 2-RealTimeMessaging.md
-│       ├── 3-FileSharing.md
-│       ├── 4-EmojiReactions.md
-│       └── 5-MessageThreading.md
-├── public/              # Client-side files
-│   ├── index.html       # Main HTML file
-│   ├── app.js          # Client JavaScript
-│   ├── style.css       # Styles
-│   └── uploads/        # Uploaded files
-└── node_modules/        # Dependencies
+# Security
+JWT_SECRET="your-secret-key"
+SESSION_SECRET="your-session-secret"
+
+# File Upload
+MAX_FILE_SIZE=5242880  # 5MB
+ALLOWED_FILE_TYPES="image/jpeg,image/png,image/gif,application/pdf"
 ```
 
-## Getting Started
+## Secure File Organization
 
-1. **Installation**
-   ```bash
-   # Clone the repository
-   git clone <repository-url>
+Sensitive files are stored in the `deployment/` directory (gitignored):
+```
+deployment/
+├── keys/     # SSH keys (400 permissions)
+└── aws/      # AWS credentials (600 permissions)
+```
 
-   # Install dependencies
-   npm install
+## Database Management
 
-   # Create .env file
-   cp .env.example .env
+The application uses PostgreSQL with Prisma ORM:
+- Schema defined in `prisma/schema.prisma`
+- Migrations in `prisma/migrations/`
+- Database cleanup script in `prisma/clean-db.js`
 
-   # Start the server
-   npm start
-   ```
+## Development Workflow
 
-2. **Configuration**
-   - Set up environment variables in `.env`
-   - Configure MongoDB connection (optional)
-   - Adjust file upload limits if needed
-   - Set JWT secret key
+1. Copy environment template: `cp .env.example .env`
+2. Install dependencies: `npm install`
+3. Run migrations: `npx prisma migrate dev`
+4. Start development server: `npm run dev`
 
-3. **Usage**
-   - Access the application at `http://localhost:3000`
-   - Register a new account or enter as guest
-   - Start chatting in channels or direct messages
-   - Share files and react to messages
-   - Create message threads for organized discussions
+## Production Deployment
 
-## Common Tasks
-
-1. **User Management**
-   - Register new users
-   - Manage user sessions
-   - Handle guest access
-   - Monitor online status
-
-2. **Message Management**
-   - Send and receive messages
-   - Create and manage threads
-   - Handle file uploads
-   - Manage reactions
-
-3. **Channel Management**
-   - Create new channels
-   - Manage channel members
-   - Archive inactive channels
-   - Monitor channel activity
+1. SSH access: `ssh -i deployment/keys/deploy2.pem ubuntu@[EC2-IP]`
+2. Environment setup: Copy and configure `.env`
+3. Database setup: `npx prisma migrate deploy`
+4. Process management: PM2 for application lifecycle
 
 ## Security Considerations
 
-1. **Authentication**
-   - JWT token validation
-   - Password hashing
-   - Session management
-   - Rate limiting
-
-2. **File Upload**
-   - File type validation
-   - Size restrictions
-   - Malware scanning
-   - Secure storage
-
-3. **Data Protection**
-   - Input sanitization
-   - XSS prevention
-   - CSRF protection
-   - Data encryption
-
-## Performance Optimization
-
-1. **Real-Time Communication**
-   - Connection pooling
-   - Event batching
-   - Message queuing
-   - Load balancing
-
-2. **File Handling**
-   - Image optimization
-   - Chunked uploads
-   - CDN integration
-   - Cache management
-
-3. **Data Management**
-   - Database indexing
-   - Query optimization
-   - Memory management
-   - Connection pooling
-
-## Known Limitations
-
-1. **Storage**
-   - In-memory message storage
-   - Local file storage
-   - No message persistence
-   - Limited history
-
-2. **Scalability**
-   - Single server architecture
-   - No horizontal scaling
-   - Memory constraints
-   - Performance bottlenecks
-
-3. **Features**
-   - Basic authentication
-   - Limited file types
-   - No message editing
-   - No admin features
-
-## Future Improvements
-
-1. **Features**
-   - Message editing
-   - Rich text formatting
-   - Voice/video chat
-   - Screen sharing
-   - File preview
-   - Message search
-
-2. **Architecture**
-   - Database integration
-   - Cloud storage
-   - Microservices
-   - Load balancing
-   - Caching layer
-
-3. **Security**
-   - End-to-end encryption
-   - Two-factor authentication
-   - OAuth integration
-   - Audit logging
-
-4. **User Experience**
-   - Mobile optimization
-   - Offline support
-   - Push notifications
-   - Keyboard shortcuts
-   - Accessibility
-
-## Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
-
-## Support
-For issues and questions:
-1. Check the documentation
-2. Search existing issues
-3. Create a new issue
-4. Contact support team
-
-## License
-This project is licensed under the MIT License - see the LICENSE file for details. 
+- Environment variables in `.env` (never committed)
+- Secure file permissions (400 for keys, 600 for credentials)
+- HTTPS in production
+- Regular dependency updates
+- Rate limiting on API endpoints
+- File upload restrictions 

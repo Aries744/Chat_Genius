@@ -9,6 +9,9 @@ node_modules/
 # Database
 *.sqlite
 *.db
+*.sql
+backup*.sql
+dump*.sql
 
 # Logs
 logs
@@ -51,7 +54,39 @@ deploy*.pem
 *-key
 *-key.pub
 chat-app-key*
+deployment/
+credentials
+config
+*_accessKeys.csv
+alexander.walter@gauntletai.com_accessKeys.csv
 
 # PM2 Files
 .pm2/
 ecosystem.config.js
+
+# Security and Secrets
+*.cert
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
+*.csr
+*.der
+*.priv
+secrets/
+credentials/
+keys/
+ssl/
+
+# Backup files
+*.bak
+*.backup
+*~
+*.swp
+*.old
+
+# Local deployment directory
+~/deployment/
+/deployment/
+**/deployment/
