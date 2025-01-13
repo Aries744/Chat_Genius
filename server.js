@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import prisma from './lib/prisma.js';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,29 +23,41 @@ app.use(express.static('public'));
 // File upload configuration
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'public/uploads/');
+        const uploadDir = path.join(__dirname, 'public', 'uploads');
+        // Ensure upload directory exists
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
+        // Generate unique filename
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
+        const ext = path.extname(file.originalname);
+        cb(null, uniqueSuffix + ext);
     }
 });
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { 
+        fileSize: 5 * 1024 * 1024 // 5MB limit
+    },
     fileFilter: (req, file, cb) => {
         const allowedTypes = [
             'image/jpeg',
             'image/png',
             'image/gif',
             'application/pdf',
-            'text/plain'
+            'text/plain',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         ];
+        
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            cb(new Error('Invalid file type'));
+            cb(new Error(`File type ${file.mimetype} is not allowed`));
         }
     }
 });
@@ -181,15 +194,30 @@ app.post('/upload', upload.single('file'), (req, res) => {
             return res.status(400).json({ error: 'No file uploaded' });
         }
 
-        const fileUrl = `/uploads/${req.file.filename}`;
+        // Convert backslashes to forward slashes for URLs
+        const relativePath = path.relative(
+            path.join(__dirname, 'public'),
+            req.file.path
+        ).replace(/\\/g, '/');
+
+        const fileUrl = `/${relativePath}`;
+        
+        console.log('File uploaded successfully:', {
+            url: fileUrl,
+            type: req.file.mimetype,
+            name: req.file.originalname,
+            size: req.file.size
+        });
+
         res.json({
             url: fileUrl,
             type: req.file.mimetype,
-            name: req.file.originalname
+            name: req.file.originalname,
+            size: req.file.size
         });
     } catch (error) {
         console.error('File upload error:', error);
-        res.status(500).json({ error: 'File upload failed' });
+        res.status(500).json({ error: 'File upload failed', details: error.message });
     }
 });
 

@@ -1,354 +1,286 @@
-# Message Threading
+# Message Threading Feature
 
 ## Overview
-The application supports message threading functionality, allowing users to create conversation threads by replying to specific messages. This feature helps organize discussions and maintain context in both channels and direct messages.
+Message threading in Chat Genius allows users to create conversation threads from any message, enabling organized discussions and focused responses. The feature supports text messages, file attachments, and emoji reactions within threads.
 
 ## Implementation
 
-### 1. Server-Side (`server.js`)
+### Database Schema
+```prisma
+model Message {
+    id        String    @id @default(uuid())
+    text      String
+    userId    String
+    channelId String
+    parentId  String?   @map("parent_id")
+    fileUrl   String?   @map("file_url")
+    fileType  String?   @map("file_type")
+    fileName  String?   @map("file_name")
+    user      User      @relation(fields: [userId], references: [id])
+    channel   Channel   @relation(fields: [channelId], references: [id])
+    parent    Message?  @relation("ThreadReplies", fields: [parentId], references: [id])
+    replies   Message[] @relation("ThreadReplies")
+    reactions Reaction[]
+    createdAt DateTime  @default(now())
+    updatedAt DateTime  @updatedAt
+}
+```
+
+### Server-Side Implementation
+
+#### Thread Message Creation
 ```javascript
-// Thread message handling
-socket.on('thread message', async (data) => {
+socket.on('chat message', async (msg) => {
     try {
-        const { parentId, channelId, text } = data;
-        const user = users.get(socket.userId);
-        if (!user) return;
-
-        // Get channel messages
-        const channelMessages = messages.get(channelId);
-        if (!channelMessages) return;
-
-        // Find parent message
-        const parentMessage = channelMessages.find(m => m.id === parentId);
-        if (!parentMessage) return;
-
-        // Create thread message
-        const message = {
-            id: Date.now().toString(),
-            text,
-            user: user.username,
-            time: new Date().toISOString(),
-            parentId,
-            reactions: {}
-        };
-
-        // Add message to channel
-        channelMessages.push(message);
-
-        // Update parent message's replies
-        if (!parentMessage.replies) {
-            parentMessage.replies = [];
-        }
-        parentMessage.replies.push(message.id);
-
-        // Broadcast thread update
-        io.to(channelId).emit('thread message', {
-            channelId,
-            parentId,
-            message
+        const message = await prisma.message.create({
+            data: {
+                text: msg.text,
+                userId: socket.userId,
+                channelId: msg.channelId,
+                parentId: msg.parentId || null,
+                fileUrl: msg.fileUrl,
+                fileType: msg.fileType,
+                fileName: msg.fileName
+            },
+            include: {
+                user: true,
+                reactions: true,
+                replies: true
+            }
         });
 
-        // Notify thread participants
-        const threadParticipants = new Set(
-            channelMessages
-                .filter(m => m.parentId === parentId)
-                .map(m => m.user)
-        );
-        threadParticipants.delete(user.username);
-        
-        if (threadParticipants.size > 0) {
-            io.to(channelId).emit('thread notification', {
-                channelId,
-                parentId,
-                message: `New reply in thread by ${user.username}`
+        // Broadcast to channel
+        io.to(msg.channelId).emit('chat message', message);
+
+        // If it's a thread reply, emit thread update
+        if (msg.parentId) {
+            const threadMessages = await prisma.message.findUnique({
+                where: { id: msg.parentId },
+                include: {
+                    user: true,
+                    reactions: true,
+                    replies: {
+                        include: {
+                            user: true,
+                            reactions: true
+                        }
+                    }
+                }
             });
+            io.to(msg.channelId).emit('thread updated', threadMessages);
         }
     } catch (error) {
-        console.error('Error handling thread message:', error);
-    }
-});
-
-// Get thread messages
-socket.on('get thread', async (data) => {
-    try {
-        const { parentId, channelId } = data;
-        const channelMessages = messages.get(channelId);
-        if (!channelMessages) return;
-
-        const threadMessages = channelMessages.filter(
-            m => m.parentId === parentId
-        );
-
-        socket.emit('thread messages', {
-            parentId,
-            messages: threadMessages
-        });
-    } catch (error) {
-        console.error('Error getting thread messages:', error);
+        console.error('Error creating message:', error);
+        socket.emit('error', { message: 'Failed to create message' });
     }
 });
 ```
 
-### 2. Client-Side (`public/app.js`)
-```javascript
-let currentThreadId = null;
+### Client-Side Implementation
 
-// Open thread view
-function openThread(messageId) {
-    currentThreadId = messageId;
-    const threadView = document.getElementById('thread-view');
-    threadView.style.display = 'block';
-
-    // Get parent message
-    const parentMessage = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!parentMessage) return;
-
-    // Display parent message
-    const threadHeader = document.getElementById('thread-header');
-    threadHeader.innerHTML = `
-        <div class="parent-message">
-            <span class="user">${parentMessage.querySelector('.user').textContent}</span>
-            <span class="time">${parentMessage.querySelector('.time').textContent}</span>
-            <div class="text">${parentMessage.querySelector('.text').textContent}</div>
-        </div>
-    `;
-
-    // Clear thread messages
-    const threadMessages = document.getElementById('thread-messages');
-    threadMessages.innerHTML = '';
-
-    // Request thread messages
-    socket.emit('get thread', {
-        parentId: messageId,
-        channelId: currentChannel
-    });
-}
-
-// Close thread view
-function closeThread() {
-    document.getElementById('thread-view').style.display = 'none';
-    currentThreadId = null;
-}
-
-// Send thread message
-document.getElementById('thread-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const input = document.getElementById('thread-input');
-    const message = input.value.trim();
-    
-    if (message && socket && currentThreadId) {
-        socket.emit('thread message', {
-            parentId: currentThreadId,
-            channelId: currentChannel,
-            text: message
-        });
-        input.value = '';
-    }
-});
-
-// Handle thread messages
-socket.on('thread messages', (data) => {
-    if (data.parentId !== currentThreadId) return;
-
-    const threadMessages = document.getElementById('thread-messages');
-    data.messages.forEach(message => {
-        const messageElement = document.createElement('div');
-        messageElement.className = 'thread-message';
-        messageElement.dataset.messageId = message.id;
-
-        messageElement.innerHTML = `
-            <span class="user">${message.user}</span>
-            <span class="time">${formatTime(message.time)}</span>
-            <div class="text">${message.text}</div>
-            <div class="message-reactions"></div>
-        `;
-
-        threadMessages.appendChild(messageElement);
-        if (message.reactions) {
-            updateMessageReactions(message.id, message.reactions);
-        }
-    });
-
-    threadMessages.scrollTop = threadMessages.scrollHeight;
-});
-
-// Handle new thread message
-socket.on('thread message', (data) => {
-    if (data.parentId === currentThreadId) {
-        const threadMessages = document.getElementById('thread-messages');
-        const messageElement = document.createElement('div');
-        messageElement.className = 'thread-message';
-        messageElement.dataset.messageId = data.message.id;
-
-        messageElement.innerHTML = `
-            <span class="user">${data.message.user}</span>
-            <span class="time">${formatTime(data.message.time)}</span>
-            <div class="text">${data.message.text}</div>
-            <div class="message-reactions"></div>
-        `;
-
-        threadMessages.appendChild(messageElement);
-        threadMessages.scrollTop = threadMessages.scrollHeight;
-    }
-
-    // Update reply count in main chat
-    const parentMessage = document.querySelector(`[data-message-id="${data.parentId}"]`);
-    if (parentMessage) {
-        const threadBtn = parentMessage.querySelector('.thread-btn');
-        const replyCount = parseInt(threadBtn.getAttribute('data-replies') || '0') + 1;
-        threadBtn.setAttribute('data-replies', replyCount);
-        threadBtn.textContent = `${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`;
-    }
-});
-```
-
-### 3. HTML Structure (`public/index.html`)
+#### Thread UI Components
 ```html
-<!-- Thread view -->
-<div id="thread-view" class="thread-view" style="display: none;">
+<div id="thread-view" class="thread-sidebar">
     <div class="thread-header">
-        <button class="close-thread" onclick="closeThread()">×</button>
         <h3>Thread</h3>
+        <button class="close-thread-btn" onclick="closeThread()">×</button>
     </div>
-    <div id="thread-header"></div>
-    <div id="thread-messages" class="thread-messages"></div>
-    <form id="thread-form" class="thread-form">
-        <input type="text" id="thread-input" placeholder="Reply to thread...">
+    <div class="thread-content">
+        <div id="parent-message"></div>
+        <div id="thread-messages"></div>
+    </div>
+    <form id="thread-message-form">
+        <input type="text" id="thread-message-input" placeholder="Reply in thread...">
+        <input type="file" id="thread-file-input" style="display: none">
+        <button type="button" onclick="document.getElementById('thread-file-input').click()">📎</button>
         <button type="submit">Send</button>
     </form>
 </div>
 ```
 
+#### Thread Management
+```javascript
+let currentThreadId = null;
+
+function openThread(messageId) {
+    currentThreadId = messageId;
+    const threadView = document.getElementById('thread-view');
+    threadView.style.display = 'flex';
+    document.body.classList.add('thread-open');
+    
+    // Load thread messages
+    socket.emit('get thread', {
+        messageId: messageId,
+        channelId: currentChannel
+    });
+}
+
+function closeThread() {
+    currentThreadId = null;
+    const threadView = document.getElementById('thread-view');
+    threadView.style.display = 'none';
+    document.body.classList.remove('thread-open');
+}
+
+// Handle thread messages
+socket.on('thread messages', (data) => {
+    const parentMessage = data.parent;
+    const replies = data.replies;
+    
+    // Display parent message
+    document.getElementById('parent-message').innerHTML = renderMessage(parentMessage);
+    
+    // Display replies
+    const threadMessages = document.getElementById('thread-messages');
+    threadMessages.innerHTML = '';
+    replies.forEach(reply => {
+        threadMessages.appendChild(renderMessage(reply));
+    });
+    
+    threadMessages.scrollTop = threadMessages.scrollHeight;
+});
+
+// Send thread reply
+document.getElementById('thread-message-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('thread-message-input');
+    const message = input.value.trim();
+    
+    if (message && currentThreadId) {
+        socket.emit('chat message', {
+            channelId: currentChannel,
+            text: message,
+            parentId: currentThreadId
+        });
+        input.value = '';
+    }
+});
+```
+
+## Styling
+
+### Thread Sidebar
+```css
+.thread-sidebar {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 300px;
+    background: #fff;
+    border-left: 1px solid #e1e1e1;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.thread-header {
+    padding: 15px;
+    border-bottom: 1px solid #e1e1e1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+}
+
+.thread-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.parent-message {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 15px;
+    border-left: 3px solid #007bff;
+}
+
+.thread-reply {
+    padding: 8px 12px;
+    margin-left: 15px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #e1e1e1;
+}
+```
+
 ## Features
 
-### 1. Thread Creation
-- Reply to any message
-- Thread context preservation
-- Parent message display
-- Reply count tracking
-- Thread notifications
-
-### 2. Thread View
-- Dedicated thread interface
-- Real-time updates
-- Message reactions
-- File attachments
-- User mentions
-
-### 3. Thread Management
-- Thread participants
-- Reply notifications
-- Thread history
-- Thread search
-- Thread moderation
-
-### 4. User Experience
-- Easy thread navigation
-- Thread status indicators
-- Unread indicators
-- Quick actions
-- Keyboard shortcuts
-
-## Thread Flow
-
-1. **Creating Thread**
-   ```
-   User clicks reply button
-   ↓
-   Thread view opens
-   ↓
-   Parent message displayed
-   ↓
-   Thread messages loaded
-   ↓
-   User types reply
-   ↓
-   Reply sent to server
-   ↓
-   Server processes reply
-   ↓
-   All participants notified
-   ```
-
-2. **Viewing Thread**
-   ```
-   User opens thread
-   ↓
-   Thread view displayed
-   ↓
-   Parent message shown
-   ↓
-   Thread messages loaded
-   ↓
-   Real-time updates enabled
-   ↓
-   User interactions tracked
-   ```
-
-## Storage Management
-
-1. **Thread Storage**
-   - Parent-child relationships
-   - Message ordering
-   - Participant tracking
-   - Reply counts
-   - Thread status
-
-2. **Performance**
-   - Efficient lookups
+### Core Functionality
+1. Thread Creation
+   - Create thread from any message
+   - Support for text and files
+   - Emoji reactions in threads
    - Real-time updates
-   - Memory optimization
-   - Cache management
+
+2. Thread View
+   - Dedicated sidebar panel
+   - Parent message display
+   - Chronological replies
+   - File attachment support
+
+3. Thread Management
+   - Open/close threads
+   - Reply count tracking
+   - Real-time updates
+   - Thread notifications
+
+### User Experience
+1. Visual Feedback
+   - Thread indicators
+   - Reply counts
+   - Loading states
+   - Error handling
+
+2. Interactions
+   - Click to open thread
+   - Easy thread navigation
+   - File attachments
+   - Emoji reactions
+
+## Security Considerations
+
+1. Access Control
+   - Thread access verification
+   - Channel membership checks
+   - User authentication
+   - Rate limiting
+
+2. Data Protection
+   - Input sanitization
+   - XSS prevention
+   - SQL injection protection
+   - File upload security
 
 ## Limitations
-
-1. **Storage**
-   - In-memory only
-   - No persistence
-   - Limited history
-   - No backup
-
-2. **Features**
-   - No thread search
-   - No thread moderation
-   - No thread archiving
-   - Limited notifications
-
-3. **Performance**
-   - Single server
-   - No caching
-   - Limited scaling
-   - Memory constraints
+- No thread search
+- No thread pinning
+- No thread archiving
+- Basic notification system
+- No thread moderation tools
 
 ## Future Improvements
-
-1. **Features**
+1. Enhanced Features
    - Thread search
-   - Thread moderation
+   - Thread pinning
    - Thread archiving
    - Rich text formatting
-   - Code snippets
-   - Thread templates
+   - Thread bookmarks
+
+2. User Experience
+   - Thread previews
+   - Improved notifications
+   - Thread sorting options
    - Thread categories
 
-2. **Performance**
-   - Thread caching
-   - Lazy loading
-   - Pagination
-   - Load balancing
-   - Memory optimization
-
-3. **User Experience**
-   - Better navigation
-   - Thread previews
-   - Quick replies
-   - Thread sharing
-   - Thread bookmarks
-   - Thread analytics
-
-4. **Management**
+3. Management Tools
    - Thread moderation
    - Thread analytics
-   - Thread backup
-   - Thread export
-   - Thread archiving 
+   - Bulk actions
+   - Thread templates 

@@ -307,20 +307,35 @@ function addMessage(message) {
     messageElement.className = 'message';
     messageElement.dataset.messageId = message.id;
     
+    let fileAttachment = '';
+    if (message.fileUrl) {
+        if (message.fileType?.startsWith('image/')) {
+            fileAttachment = `
+                <div class="file-attachment">
+                    <img src="${message.fileUrl}" alt="Attached image" class="message-image" 
+                         onclick="window.open('${message.fileUrl}', '_blank')">
+                    <div class="file-info">
+                        <span class="file-name">${message.fileName}</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            fileAttachment = `
+                <div class="file-attachment">
+                    <a href="${message.fileUrl}" target="_blank" class="file-link">
+                        <span class="file-icon">${getFileIcon(message.fileType)}</span>
+                        <span class="file-name">${message.fileName}</span>
+                    </a>
+                </div>
+            `;
+        }
+    }
+
     messageElement.innerHTML = `
         <span class="user">${message.username}</span>
         <span class="time">${formatTime(message.createdAt)}</span>
         <div class="text">${message.text}</div>
-        ${message.fileUrl ? `
-            <div class="file-attachment">
-                ${message.fileType?.startsWith('image/') 
-                    ? `<img src="${message.fileUrl}" alt="Attached image" class="message-image">`
-                    : `<a href="${message.fileUrl}" target="_blank" class="file-link">
-                        <i class="file-icon"></i> ${message.fileName}
-                       </a>`
-                }
-            </div>
-        ` : ''}
+        ${fileAttachment}
         <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
         <div class="message-reactions"></div>
         <div class="message-actions">
@@ -342,29 +357,20 @@ function addMessage(message) {
 }
 
 // Helper function to get appropriate icon for file type
-function getFileIcon(extension) {
+function getFileIcon(mimeType) {
     const iconMap = {
-        'PDF': '📄',
-        'DOC': '📝',
-        'DOCX': '📝',
-        'XLS': '📊',
-        'XLSX': '📊',
-        'TXT': '📝',
-        'JPG': '🖼️',
-        'JPEG': '🖼️',
-        'PNG': '🖼️',
-        'GIF': '🖼️',
-        'ZIP': '📦',
-        'RAR': '📦',
-        'MP3': '🎵',
-        'MP4': '🎥',
-        'AVI': '🎥',
-        'MOV': '🎥'
+        'application/pdf': '📄',
+        'application/msword': '📝',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '📝',
+        'text/plain': '📝',
+        'image/jpeg': '🖼️',
+        'image/png': '🖼️',
+        'image/gif': '🖼️'
     };
-    return iconMap[extension] || '📎';
+    return iconMap[mimeType] || '📎';
 }
 
-// Update file upload handler
+// File upload handling
 document.getElementById('file-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -376,61 +382,51 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
         return;
     }
 
-    // Create FormData and append file
-    const formData = new FormData();
-    formData.append('file', file);
+    // Show loading indicator
+    const messageInput = document.getElementById('message-input');
+    const originalPlaceholder = messageInput.placeholder;
+    messageInput.placeholder = 'Uploading file...';
+    messageInput.disabled = true;
 
     try {
+        // Create FormData and append file
+        const formData = new FormData();
+        formData.append('file', file);
+
         const response = await fetch('/upload', {
             method: 'POST',
             body: formData
         });
 
-        if (!response.ok) throw new Error('Upload failed');
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.details || 'Upload failed');
+        }
         
         const data = await response.json();
-        
-        // Format file size
-        const fileSize = formatFileSize(file.size);
+        console.log('File uploaded successfully:', data);
         
         // Send file message
-        if (currentChannel.includes('-')) {
-            // Direct message
-            const [user1, user2] = currentChannel.split('-');
-            const targetUserId = user1 === currentUser.id ? user2 : user1;
-            socket.emit('direct message', {
-                targetUserId,
-                text: `[FILE] ${file.name}`,
-                fileUrl: data.url,
-                fileType: data.type,
-                fileSize: fileSize
-            });
-        } else {
-            // Channel message
-            socket.emit('chat message', {
-                channelId: currentChannel,
-                text: `[FILE] ${file.name}`,
-                fileUrl: data.url,
-                fileType: data.type,
-                fileSize: fileSize
-            });
-        }
+        socket.emit('chat message', {
+            channelId: currentChannel,
+            text: `Shared a file: ${file.name}`,
+            fileUrl: data.url,
+            fileType: data.type,
+            fileName: data.name,
+            parentId: currentThreadId || null // Support for thread replies
+        });
+
+        // Clear the input
+        e.target.value = '';
     } catch (error) {
-        alert('Failed to upload file');
+        console.error('File upload error:', error);
+        alert(error.message || 'Failed to upload file');
+    } finally {
+        // Restore input state
+        messageInput.placeholder = originalPlaceholder;
+        messageInput.disabled = false;
     }
-
-    // Clear the input
-    e.target.value = '';
 });
-
-// Helper function to format file size
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
 
 // Check if user is already logged in
 const token = localStorage.getItem('token');
@@ -630,25 +626,41 @@ function addThreadMessage(message) {
     messageElement.className = 'message thread-reply';
     messageElement.dataset.messageId = message.id;
     
+    let fileAttachment = '';
+    if (message.fileUrl) {
+        if (message.fileType?.startsWith('image/')) {
+            fileAttachment = `
+                <div class="file-attachment">
+                    <img src="${message.fileUrl}" alt="Attached image" class="message-image" 
+                         onclick="window.open('${message.fileUrl}', '_blank')">
+                    <div class="file-info">
+                        <span class="file-name">${message.fileName}</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            fileAttachment = `
+                <div class="file-attachment">
+                    <a href="${message.fileUrl}" target="_blank" class="file-link">
+                        <span class="file-icon">${getFileIcon(message.fileType)}</span>
+                        <span class="file-name">${message.fileName}</span>
+                    </a>
+                </div>
+            `;
+        }
+    }
+    
     messageElement.innerHTML = `
         <span class="user">${message.username}</span>
         <span class="time">${formatTime(message.createdAt)}</span>
         <div class="text">${message.text}</div>
-        ${message.fileUrl ? `
-            <div class="file-attachment">
-                ${message.fileType?.startsWith('image/') 
-                    ? `<img src="${message.fileUrl}" alt="Attached image" class="message-image">`
-                    : `<a href="${message.fileUrl}" target="_blank" class="file-link">
-                        <i class="file-icon"></i> ${message.fileName}
-                       </a>`
-                }
-            </div>
-        ` : ''}
+        ${fileAttachment}
         <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
         <div class="message-reactions"></div>
     `;
     
     threadMessages.appendChild(messageElement);
+    threadMessages.scrollTop = threadMessages.scrollHeight;
     
     if (message.reactions) {
         updateMessageReactions(message.id, message.reactions);

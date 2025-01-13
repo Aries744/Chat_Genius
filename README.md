@@ -1,84 +1,82 @@
-# Simple Chat Application
+# Chat Genius
 
-A lightweight Slack-like messaging application for work communication.
-
-## Prerequisites
-- Node.js v16 or higher
-- PostgreSQL v14 or higher
-- npm or yarn package manager
+A real-time chat application with features like message threading, file sharing, and emoji reactions.
 
 ## Features
-- Real-time messaging with Socket.IO
-- User authentication with JWT
-- PostgreSQL database for persistent storage
-- File sharing and uploads
+
+- Real-time messaging using Socket.IO
 - Message threading and replies
-- Emoji reactions
-- Clean and responsive interface
-- Real-time thread notifications
-- Thread history preservation
+- File attachments (images, PDFs, documents)
+- Emoji reactions to messages
+- User authentication and guest access
+- Channel-based communication
+- Direct messaging between users
+
+## Tech Stack
+
+- Node.js & Express.js
+- Socket.IO for real-time communication
+- PostgreSQL with Prisma ORM
+- JWT for authentication
+- PM2 for process management
+- AWS EC2 for hosting
+
+## Prerequisites
+
+- Node.js (v16 or higher)
+- PostgreSQL (v14 or higher)
+- npm or yarn
 
 ## Local Development Setup
 
-1. Install dependencies:
+1. Clone the repository:
+```bash
+git clone https://github.com/Aries744/Chat_Genius.git
+cd Chat_Genius
+```
+
+2. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Set up PostgreSQL:
+3. Set up environment variables:
 ```bash
-# Start PostgreSQL service (MacOS)
-brew services start postgresql@14
-# or for Linux
-sudo service postgresql start
-# or for Windows
-# Start PostgreSQL through the Windows Services application
+cp .env.example .env
+# Edit .env with your database credentials and JWT secret
+```
 
-# Create database
-createdb chatapp
-
-# Initialize database schema and generate Prisma client
+4. Set up the database:
+```bash
 npx prisma migrate dev
 ```
 
-3. Configure environment:
-- Copy `.env.example` to `.env` (if it doesn't exist, create it with the following content):
-```env
-PORT=3000
-JWT_SECRET=your-secret-key-change-in-production
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/chatapp?schema=public"
-```
-- Update database connection string if needed
-
-4. Start the server:
+5. Start the development server:
 ```bash
 npm start
 ```
 
-5. Open your browser and navigate to `http://localhost:3000`
+The application will be available at `http://localhost:3000`.
 
-## Production Deployment
+## Production Deployment (AWS EC2)
 
-The application is deployed on AWS EC2. Follow these steps for deployment:
-
-### Initial Setup
 1. SSH into your EC2 instance:
 ```bash
-ssh -i your-key.pem ec2-user@YOUR_EC2_IP
+ssh -i your-key.pem ec2-user@your-instance-ip
 ```
 
 2. Install required software:
 ```bash
-# Update system packages
+# Update system
 sudo yum update -y
 
 # Install Node.js
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-. ~/.nvm/nvm.sh
+source ~/.bashrc
 nvm install 16
 
 # Install PostgreSQL
-sudo yum install postgresql postgresql-server postgresql-devel postgresql-contrib postgresql-docs
+sudo yum install postgresql14 postgresql14-server
 sudo postgresql-setup initdb
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
@@ -86,96 +84,78 @@ sudo systemctl enable postgresql
 
 3. Clone and setup the application:
 ```bash
-git clone https://github.com/yourusername/chat-genius.git
-cd chat-genius
+git clone https://github.com/Aries744/Chat_Genius.git
+cd Chat_Genius
 npm install
+npm install -g pm2
 ```
 
 4. Configure PostgreSQL:
 ```bash
 sudo -u postgres psql
-CREATE DATABASE chatapp;
-\q
+CREATE DATABASE chatgenius;
+CREATE USER chatuser WITH PASSWORD 'your_password';
+GRANT ALL PRIVILEGES ON DATABASE chatgenius TO chatuser;
 ```
 
 5. Set up environment variables:
 ```bash
 cp .env.example .env
 # Edit .env with production values
-nano .env
 ```
 
-6. Setup PM2 for process management:
+6. Run database migrations:
 ```bash
-npm install pm2 -g
-pm2 start server.js --name chat-app
-pm2 startup
+npx prisma migrate deploy
+```
+
+7. Start the application with PM2:
+```bash
+pm2 start server.js --name chat-genius
 pm2 save
-```
-
-### Updating the Application
-To update the running application:
-```bash
-cd ~/chat-genius
-git pull
-npm install
-pm2 restart chat-app
-```
-
-### Monitoring
-```bash
-# View logs
-pm2 logs chat-app
-
-# Monitor application
-pm2 monit
-
-# View application status
-pm2 status
+pm2 startup
 ```
 
 ## Database Management
 
-### View Data
+To clean the database (remove all data):
 ```bash
-npx prisma studio
+node prisma/clean-db.js
 ```
 
-### Reset Data
+To reset the database (clean and recreate):
 ```bash
-npx prisma migrate reset --force
+npx prisma migrate reset
 ```
 
-### Update Schema
+## Monitoring and Logs
+
+View application logs:
 ```bash
-npx prisma migrate dev
+pm2 logs chat-genius
 ```
 
-## Usage
-1. Enter your name to join the chat
-2. Start sending messages
-3. Messages are updated in real-time for all connected users
-4. Click "Reply in thread" on any message to start or view a thread
-5. Use emoji reactions in both main chat and threads
-6. Share files in messages and thread replies
-7. The last 50 messages are preserved and shown to new users
+Monitor application:
+```bash
+pm2 monit
+```
 
-## Message Threading
-- Reply to any message to create a thread
-- View all replies in a dedicated thread panel
-- Real-time updates for thread replies
-- Emoji reactions in threads
-- File sharing in thread replies
-- Thread reply count indicators
-- Thread notifications for participants
+## Security Considerations
 
-## Technical Stack
-- Node.js
-- Express
-- Socket.IO
-- PostgreSQL
-- Prisma ORM
-- JWT Authentication
-- Vanilla JavaScript (no framework)
-- HTML5 & CSS3 
- 
+- All passwords are hashed using bcrypt
+- JWT tokens are used for authentication
+- File uploads are restricted by type and size
+- CORS is configured for production
+- Rate limiting is implemented for API endpoints
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License. 

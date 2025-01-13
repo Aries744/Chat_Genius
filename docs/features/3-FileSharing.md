@@ -1,108 +1,109 @@
-# File Sharing
+# File Sharing Feature
 
 ## Overview
-The application supports file sharing functionality using `multer` for handling file uploads, allowing users to share files in both channels and direct messages.
+File sharing in Chat Genius allows users to share various types of files in both main chat and thread replies. The feature supports images, documents, and text files with a size limit of 5MB per file.
+
+## Supported File Types
+- Images: JPEG, PNG, GIF
+- Documents: PDF, DOC, DOCX
+- Text: TXT
 
 ## Implementation
 
-### 1. Server-Side (`server.js`)
-```javascript
-const multer = require('multer');
-const path = require('path');
+### Server-Side
 
-// Configure multer for file uploads
+#### File Upload Configuration
+```javascript
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'public/uploads/');
+        const uploadDir = path.join(__dirname, 'public', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
+        const ext = path.extname(file.originalname);
+        cb(null, uniqueSuffix + ext);
     }
 });
 
 const upload = multer({
     storage: storage,
-    limits: {
+    limits: { 
         fileSize: 5 * 1024 * 1024 // 5MB limit
     },
     fileFilter: (req, file, cb) => {
-        // Allowed file types
         const allowedTypes = [
             'image/jpeg',
             'image/png',
             'image/gif',
             'application/pdf',
-            'text/plain'
+            'text/plain',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         ];
         
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            cb(new Error('Invalid file type'));
+            cb(new Error(`File type ${file.mimetype} is not allowed`));
         }
     }
 });
+```
 
-// File upload endpoint
+#### Upload Endpoint
+```javascript
 app.post('/upload', upload.single('file'), (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No file uploaded' });
         }
 
-        const fileUrl = `/uploads/${req.file.filename}`;
+        const relativePath = path.relative(
+            path.join(__dirname, 'public'),
+            req.file.path
+        ).replace(/\\/g, '/');
+
+        const fileUrl = `/${relativePath}`;
+        
         res.json({
             url: fileUrl,
             type: req.file.mimetype,
-            name: req.file.originalname
+            name: req.file.originalname,
+            size: req.file.size
         });
     } catch (error) {
         console.error('File upload error:', error);
-        res.status(500).json({ error: 'File upload failed' });
-    }
-});
-
-// Socket.IO file message handling
-socket.on('file message', async (data) => {
-    try {
-        const user = users.get(socket.userId);
-        if (!user) return;
-
-        const message = {
-            id: Date.now().toString(),
-            text: data.text || '',
-            user: user.username,
-            time: new Date().toISOString(),
-            fileUrl: data.fileUrl,
-            fileType: data.fileType,
-            fileName: data.fileName,
-            reactions: {}
-        };
-
-        // Store and broadcast message
-        const channelId = data.channelId || 'general';
-        if (!messages.has(channelId)) {
-            messages.set(channelId, []);
-        }
-        messages.get(channelId).push(message);
-
-        io.to(channelId).emit('chat message', {
-            channelId,
-            message
+        res.status(500).json({ 
+            error: 'File upload failed', 
+            details: error.message 
         });
-    } catch (error) {
-        console.error('Error handling file message:', error);
     }
 });
 ```
 
-### 2. Client-Side (`public/app.js`)
+### Client-Side
+
+#### File Upload Handler
 ```javascript
-// File upload handling
 document.getElementById('file-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Check file size
+    if (file.size > 5 * 1024 * 1024) {
+        alert('File size must be less than 5MB');
+        e.target.value = '';
+        return;
+    }
+
+    // Show loading indicator
+    const messageInput = document.getElementById('message-input');
+    messageInput.placeholder = 'Uploading file...';
+    messageInput.disabled = true;
 
     try {
         const formData = new FormData();
@@ -116,212 +117,138 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
         if (!response.ok) {
             throw new Error('Upload failed');
         }
-
+        
         const data = await response.json();
         
         // Send file message
-        socket.emit('file message', {
+        socket.emit('chat message', {
             channelId: currentChannel,
             text: `Shared a file: ${file.name}`,
             fileUrl: data.url,
             fileType: data.type,
-            fileName: data.name
+            fileName: data.name,
+            parentId: currentThreadId || null
         });
-
-        // Clear file input
-        e.target.value = '';
     } catch (error) {
-        console.error('File upload error:', error);
-        alert('Failed to upload file');
+        alert(error.message || 'Failed to upload file');
+    } finally {
+        messageInput.placeholder = 'Type a message...';
+        messageInput.disabled = false;
+        e.target.value = '';
     }
 });
+```
 
-// File message display
-function addFileMessage(message) {
-    const messagesDiv = document.getElementById('messages');
-    const messageElement = document.createElement('div');
-    messageElement.className = 'message file-message';
-    messageElement.dataset.messageId = message.id;
+#### File Display
+```javascript
+function getFileIcon(mimeType) {
+    const iconMap = {
+        'application/pdf': '📄',
+        'application/msword': '📝',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '📝',
+        'text/plain': '📝',
+        'image/jpeg': '🖼️',
+        'image/png': '🖼️',
+        'image/gif': '🖼️'
+    };
+    return iconMap[mimeType] || '📎';
+}
 
-    let filePreview = '';
-    if (message.fileType.startsWith('image/')) {
-        filePreview = `
-            <div class="file-preview">
-                <img src="${message.fileUrl}" alt="Shared image">
-            </div>
-        `;
-    } else {
-        filePreview = `
-            <div class="file-preview">
-                <a href="${message.fileUrl}" target="_blank" class="file-link">
-                    <i class="file-icon"></i>
-                    ${message.fileName}
-                </a>
+function renderFileAttachment(message) {
+    if (!message.fileUrl) return '';
+
+    if (message.fileType?.startsWith('image/')) {
+        return `
+            <div class="file-attachment">
+                <img src="${message.fileUrl}" alt="Attached image" 
+                     class="message-image" 
+                     onclick="window.open('${message.fileUrl}', '_blank')">
+                <div class="file-info">
+                    <span class="file-name">${message.fileName}</span>
+                </div>
             </div>
         `;
     }
 
-    messageElement.innerHTML = `
-        <span class="user">${message.user}</span>
-        <span class="time">${formatTime(message.time)}</span>
-        <div class="text">${message.text}</div>
-        ${filePreview}
-        <div class="message-reactions"></div>
+    return `
+        <div class="file-attachment">
+            <a href="${message.fileUrl}" target="_blank" class="file-link">
+                <span class="file-icon">${getFileIcon(message.fileType)}</span>
+                <span class="file-name">${message.fileName}</span>
+            </a>
+        </div>
     `;
-
-    messagesDiv.appendChild(messageElement);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-    if (message.reactions) {
-        updateMessageReactions(message.id, message.reactions);
-    }
 }
 ```
 
-## Features
-
-### 1. File Upload
-- Support for multiple file types
-- File size limit (5MB)
-- Secure file storage
-- Progress indication
-- Error handling
-
-### 2. File Types
-- Images (JPEG, PNG, GIF)
-- Documents (PDF)
-- Text files
-- File type validation
-- MIME type checking
-
-### 3. File Display
-- Image previews
-- File links
-- File name display
-- File type indicators
-- Download options
-
-### 4. File Management
-- Unique file naming
-- Organized storage
-- Automatic cleanup
-- Access control
-
-## File Flow
-
-1. **Upload Process**
-   ```
-   User selects file
-   ↓
-   Client validates file
-   ↓
-   File uploaded to server
-   ↓
-   Server processes file
-   ↓
-   Server stores file
-   ↓
-   Server returns file URL
-   ↓
-   Client sends file message
-   ↓
-   All users receive update
-   ```
-
-2. **Download Process**
-   ```
-   User clicks file
-   ↓
-   Browser handles download
-   ↓
-   File served from server
-   ↓
-   File saved locally
-   ```
-
 ## Storage Management
 
-1. **File Storage**
-   - Local disk storage
-   - Organized directories
-   - Unique file names
-   - Type-based organization
+### File Storage
+- Files are stored in `/public/uploads/` directory
+- Each file has a unique name generated using timestamp and random number
+- Files are served statically by Express
 
-2. **Access Control**
-   - Public file URLs
-   - No authentication required
-   - Direct file access
-   - Browser caching
+### Cleanup Policy
+- Regular cleanup of unused files recommended
+- Monitor disk space usage
+- Consider implementing file expiration
+- Optional: Move to cloud storage (e.g., AWS S3) for better scalability
+
+## Security Considerations
+
+### Upload Security
+1. File Type Validation
+   - Whitelist of allowed MIME types
+   - Server-side validation
+   - Client-side validation
+
+2. File Size Limits
+   - 5MB maximum file size
+   - Both client and server validation
+   - Configurable through environment variables
+
+3. File Storage Security
+   - Unique file names
+   - No executable files allowed
+   - Proper file permissions
+   - Regular security scans
+
+### Best Practices
+1. File Handling
+   - Sanitize file names
+   - Check file types
+   - Validate file contents
+   - Handle upload errors gracefully
+
+2. Storage
+   - Regular backups
+   - Monitoring disk space
+   - Cleanup unused files
+   - Secure file permissions
 
 ## Limitations
-
-1. **Storage**
-   - Local storage only
-   - No cloud integration
-   - Limited space
-   - No file backup
-
-2. **Features**
-   - No file preview for non-images
-   - No file editing
-   - No version control
-   - No file sharing permissions
-
-3. **Performance**
-   - Single server bottleneck
-   - No upload acceleration
-   - No download resumption
-   - No file compression
+- 5MB file size limit
+- Limited file type support
+- Local storage only
+- No file versioning
+- No file preview for documents
 
 ## Future Improvements
-
-1. **Storage**
+1. Enhanced Features
    - Cloud storage integration
-   - CDN integration
-   - File backup system
-   - Storage optimization
+   - File versioning
+   - Document preview
+   - Drag-and-drop upload
+   - Progress indicator
 
-2. **Features**
-   - File preview for more types
-   - File editing capabilities
-   - Version control
-   - File permissions
-   - File expiration
-   - File compression
-
-3. **Performance**
-   - Chunked uploads
-   - Upload acceleration
-   - Download resumption
-   - Image optimization
-   - Caching improvements
-
-4. **Security**
-   - File scanning
+2. Security Enhancements
+   - Virus scanning
+   - Content validation
    - Access control
-   - Encryption
-   - Watermarking
-   - Audit logging 
+   - Encryption at rest
 
-## File Storage
-
-### Production Environment (EC2)
-- Files stored in `/public/uploads/` directory
-- Regular backups to prevent data loss
-- Disk space monitoring
-- Proper file permissions
-- Optional: Consider using S3 for scalability
-
-### Storage Management
-- Automatic cleanup of old files
-- Size limits per file (5MB)
-- Allowed file types
-- Virus scanning (recommended)
-- Disk space monitoring
-
-### Security
-- File type validation
-- Secure file names
-- Access control
-- Regular security scans
-- Protected upload directory 
+3. Storage Optimizations
+   - Image compression
+   - File deduplication
+   - Automated cleanup
+   - CDN integration 
