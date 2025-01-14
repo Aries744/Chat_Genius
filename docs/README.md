@@ -88,11 +88,25 @@ npm run test:openai   # Test OpenAI integration
 Sensitive files are stored in the `deployment/` directory (gitignored):
 ```
 deployment/
+├── docs/     # Deployment documentation with EC2 details
 ├── keys/     # SSH keys (400 permissions)
 └── aws/      # AWS credentials (600 permissions)
 ```
 
+Note: These files are not committed to git for security reasons.
+
 ## Production Deployment
+
+### EC2 Access
+Sensitive deployment details including IP addresses, SSH keys, and access credentials are stored in:
+```
+deployment/
+├── docs/     # Deployment documentation with EC2 details
+├── keys/     # SSH keys (400 permissions)
+└── aws/      # AWS credentials (600 permissions)
+```
+
+Note: These files are not committed to git for security reasons.
 
 ### EC2 SSH Access
 - Key location: `deployment/keys/deploy2.pem`
