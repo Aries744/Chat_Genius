@@ -9,6 +9,7 @@ import { dirname } from 'path';
 import prisma from './lib/prisma.js';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
+import { storeMessageEmbedding, handleRAGQuery } from './lib/rag.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -341,26 +342,97 @@ io.on('connection', async (socket) => {
             try {
                 console.log('Received message:', msg);
                 
-                // Verify user has access to channel
-                const channelAccess = await prisma.channelUser.findFirst({
-                    where: {
-                        userId: socket.userId,
-                        channelId: msg.channelId
-                    }
-                });
+                // Check if it's an AI query
+                if (msg.text.startsWith('/askAI ')) {
+                    const query = msg.text.slice(7).trim(); // Remove '/askAI ' prefix
+                    
+                    try {
+                        // Create the user's question message first
+                        const userMessage = await prisma.message.create({
+                            data: {
+                                text: msg.text,
+                                userId: socket.userId,
+                                channelId: msg.channelId,
+                                parentId: msg.parentId || null
+                            },
+                            include: {
+                                user: true,
+                                reactions: true,
+                                replies: {
+                                    include: {
+                                        user: true,
+                                        reactions: true
+                                    }
+                                }
+                            }
+                        });
 
-                if (!channelAccess) {
-                    console.error('User does not have access to channel');
+                        // Broadcast the user's message
+                        const formattedUserMessage = {
+                            ...userMessage,
+                            username: userMessage.user.username,
+                            reactions: {},
+                            replyCount: userMessage.replies.length
+                        };
+                        io.to(msg.channelId).emit('chat message', {
+                            channelId: msg.channelId,
+                            message: formattedUserMessage
+                        });
+
+                        // Get AI response
+                        const { response, context } = await handleRAGQuery(query);
+                        
+                        // Create AI response message as a reply to user's message
+                        const aiMessage = await prisma.message.create({
+                            data: {
+                                text: `AI Response: ${response}\n\nBased on context from:\n${context.map(c => `- ${c.message.username}: ${c.message.text}`).join('\n')}`,
+                                userId: socket.userId,
+                                channelId: msg.channelId,
+                                parentId: userMessage.id  // Set as reply to user's message
+                            },
+                            include: {
+                                user: true,
+                                reactions: true,
+                                replies: {
+                                    include: {
+                                        user: true,
+                                        reactions: true
+                                    }
+                                }
+                            }
+                        });
+
+                        const formattedAiMessage = {
+                            ...aiMessage,
+                            username: aiMessage.user.username,
+                            reactions: {},
+                            replyCount: aiMessage.replies.length
+                        };
+
+                        // Emit both the AI response and thread update
+                        io.to(msg.channelId).emit('chat message', {
+                            channelId: msg.channelId,
+                            message: formattedAiMessage
+                        });
+                        io.to(msg.channelId).emit('thread_updated', {
+                            parentId: userMessage.id,
+                            replyCount: 1,
+                            reply: formattedAiMessage
+                        });
+                    } catch (error) {
+                        console.error('Error processing AI query:', error);
+                        socket.emit('error', { message: 'Failed to process AI query' });
+                    }
                     return;
                 }
 
-                // Create the message with thread support
+                // Regular message handling
                 const message = await prisma.message.create({
                     data: {
                         text: msg.text,
                         userId: socket.userId,
                         channelId: msg.channelId,
-                        parentId: msg.parentId || null,  // Support for thread replies
+                        parentId: msg.parentId || null,
                         fileUrl: msg.fileUrl,
                         fileType: msg.fileType,
                         fileName: msg.fileName
@@ -375,6 +447,11 @@ io.on('connection', async (socket) => {
                             }
                         }
                     }
+                });
+
+                // Store message embedding for future RAG queries
+                storeMessageEmbedding(message.id).catch(error => {
+                    console.error('Error storing message embedding:', error);
                 });
 
                 console.log('Created message:', message);
@@ -415,7 +492,8 @@ io.on('connection', async (socket) => {
                     message: formattedMessage
                 });
             } catch (error) {
-                console.error('Error handling message:', error);
+                console.error('Error in chat message handler:', error);
+                socket.emit('error', { message: 'Failed to process message' });
             }
         });
 

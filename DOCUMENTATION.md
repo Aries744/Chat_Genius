@@ -12,6 +12,7 @@ Chat Genius is a real-time chat application built with Node.js and Express, usin
    - JWT authentication middleware
    - File upload handling with Multer
    - API endpoints for user management and file uploads
+   - RAG pipeline for AI-powered chat assistance
 
 2. **Database (PostgreSQL + Prisma)**
    - User management
@@ -20,84 +21,121 @@ Chat Genius is a real-time chat application built with Node.js and Express, usin
    - Thread relationships
    - Reactions storage
    - File metadata storage
+   - Message embeddings storage
 
-3. **Client (public/)**
+3. **Vector Database (Pinecone)**
+   - Storage for message embeddings
+   - Semantic search capabilities
+   - Real-time vector similarity search
+   - Metadata storage for messages
+
+4. **AI Integration (OpenAI)**
+   - Text embeddings generation
+   - Context-aware response generation
+   - Natural language understanding
+
+5. **Client (public/)**
    - Vanilla JavaScript implementation
    - Socket.IO client for real-time updates
    - Responsive CSS design
    - File upload handling
    - Thread management UI
 
-## Data Storage
+## RAG Pipeline
 
-### Database Schema
+### Overview
+The Retrieval Augmented Generation (RAG) pipeline enables AI-powered chat assistance by combining message history with OpenAI's language models. The system provides real-time feedback with loading indicators and automatic thread management.
 
-```prisma
-model User {
-  id        String   @id @default(uuid())
-  username  String   @unique
-  password  String
-  isGuest   Boolean  @default(false)
-  messages  Message[]
-  channels  ChannelUser[]
-  reactions Reaction[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+### Components
 
-model Channel {
-  id        String   @id @default(uuid())
-  name      String
-  type      String   @default("channel")
-  messages  Message[]
-  users     ChannelUser[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+1. **Message Embedding**
+   ```prisma
+   model MessageEmbedding {
+     id        String   @id @default(uuid())
+     messageId String   @unique
+     message   Message  @relation(fields: [messageId], references: [id])
+     vector    Bytes    // Store the embedding vector
+     createdAt DateTime @default(now())
+     updatedAt DateTime @updatedAt
 
-model Message {
-  id        String   @id @default(uuid())
-  text      String
-  userId    String
-  channelId String
-  parentId  String?  @map("parent_id")
-  fileUrl   String?  @map("file_url")
-  fileType  String?  @map("file_type")
-  fileName  String?  @map("file_name")
-  user      User     @relation(fields: [userId], references: [id])
-  channel   Channel  @relation(fields: [channelId], references: [id])
-  parent    Message? @relation("ThreadReplies", fields: [parentId], references: [id])
-  replies   Message[] @relation("ThreadReplies")
-  reactions Reaction[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+     @@index([messageId])
+   }
+   ```
 
-model ChannelUser {
-  id        String   @id @default(uuid())
-  userId    String
-  channelId String
-  user      User     @relation(fields: [userId], references: [id])
-  channel   Channel  @relation(fields: [channelId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+2. **Vector Storage**
+   - Platform: Pinecone
+   - Index Configuration:
+     - Dimensions: 1536 (OpenAI embedding size)
+     - Metric: Cosine Similarity
+     - Environment: Serverless
+   - Metadata Storage:
+     - Message text
+     - Username
+     - Timestamp
 
-  @@unique([userId, channelId])
-}
+3. **AI Models**
+   - Embedding Model: text-embedding-3-small
+   - Chat Model: gpt-4-turbo-preview
+   - Use Cases:
+     - Message embedding generation
+     - Context-aware response generation
 
-model Reaction {
-  id        String   @id @default(uuid())
-  emoji     String
-  userId    String
-  messageId String
-  user      User     @relation(fields: [userId], references: [id])
-  message   Message  @relation(fields: [messageId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+### Pipeline Flow
 
-  @@unique([userId, messageId, emoji])
-}
+1. **Message Processing**
+   - New messages are automatically embedded
+   - Embeddings are stored in both PostgreSQL and Pinecone
+   - Metadata is attached for context preservation
+   - Real-time UI feedback during processing
+
+2. **Query Processing**
+   - User queries via `/askAI` command
+   - Loading indicator shows "AI is thinking..."
+   - Query is embedded using the same model
+   - Similar messages are retrieved from Pinecone
+   - Context is constructed from retrieved messages
+
+3. **Response Generation**
+   - Retrieved context is formatted
+   - OpenAI generates contextual response
+   - Response is delivered in real-time
+   - Thread automatically opens to show response
+   - Loading indicator is removed
+
+### User Experience
+
+1. **Visual Feedback**
+   - Loading spinner during AI processing
+   - "AI is thinking..." status message
+   - Automatic thread opening for responses
+   - Smooth transitions and animations
+
+2. **Thread Management**
+   - AI responses automatically create threads
+   - Original question remains visible in main chat
+   - Response appears as a threaded reply
+   - Thread opens automatically for context
+
+3. **Command Interface**
+   ```
+   /askAI What was discussed about feature X?
+   ```
+   - Command appears immediately in chat
+   - Loading indicator shows processing status
+   - Response appears in thread when ready
+
+### Usage
+
+Users can interact with the AI assistant using the `/askAI` command:
 ```
+/askAI What was discussed about feature X?
+```
+
+The system will:
+1. Convert the query to an embedding
+2. Find similar messages in the chat history
+3. Use the context to generate a relevant response
+4. Include source messages for reference
 
 ## Environment Variables
 
@@ -114,7 +152,17 @@ JWT_SECRET=your-secure-secret-key
 
 # File Upload
 MAX_FILE_SIZE=5242880 # 5MB in bytes
-ALLOWED_FILE_TYPES=image/jpeg,image/png,image/gif,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document
+ALLOWED_FILE_TYPES=image/jpeg,image/png,image/gif,application/pdf,text/plain,application/msword
+
+# OpenAI Configuration
+OPENAI_API_KEY="your-openai-api-key"
+OPENAI_MODEL="gpt-4-turbo-preview"
+OPENAI_EMBEDDING_MODEL="text-embedding-3-small"
+
+# Pinecone Configuration
+PINECONE_API_KEY="your-pinecone-api-key"
+PINECONE_ENVIRONMENT="your-pinecone-environment"
+PINECONE_INDEX="chatgenius"
 ```
 
 ## API Endpoints
@@ -137,6 +185,7 @@ ALLOWED_FILE_TYPES=image/jpeg,image/png,image/gif,application/pdf,text/plain,app
 - `thread message` - New thread reply
 - `reaction` - Message reaction
 - `typing` - User typing indicator
+- `ai response` - AI assistant response
 
 ### Client Events
 - `chat message` - Send new message
@@ -165,6 +214,32 @@ ALLOWED_FILE_TYPES=image/jpeg,image/png,image/gif,application/pdf,text/plain,app
    - XSS prevention
    - SQL injection protection via Prisma
    - Rate limiting on API endpoints
+
+4. **AI Security**
+   - API key protection
+   - Rate limiting on AI requests
+   - Context validation
+   - Response filtering
+
+## Performance Considerations
+
+1. **Vector Database**
+   - Index optimization
+   - Query performance monitoring
+   - Batch operations for efficiency
+   - Regular maintenance
+
+2. **AI Integration**
+   - Caching frequently used embeddings
+   - Rate limit handling
+   - Batch processing where possible
+   - Error handling and retries
+
+3. **General**
+   - Database query optimization
+   - Connection pooling
+   - Resource monitoring
+   - Load balancing (in production)
 
 ## Deployment Infrastructure
 
@@ -277,3 +352,29 @@ ORDER BY pg_total_relation_size(relid) DESC;
    - Mobile application
    - Message formatting (Markdown)
    - Integration with external services
+
+## UI/UX Features
+
+### Real-time Feedback
+- Loading indicators for AI processing
+- Automatic thread management
+- Smooth transitions and animations
+- Clear visual hierarchy
+
+### Thread Management
+- Automatic thread creation for AI responses
+- One-click thread opening
+- Reply count indicators
+- Context preservation
+
+### Message Styling
+- Clear user attribution
+- Timestamp display
+- File attachment previews
+- Reaction support
+
+### Responsive Design
+- Mobile-friendly layout
+- Adaptive message containers
+- Touch-friendly controls
+- Flexible thread view

@@ -55,6 +55,18 @@ model Message {
   replies   Message[]  @relation("ThreadReplies")
   user      User       @relation(fields: [userId], references: [id])
   reactions Reaction[]
+  embedding MessageEmbedding?
+}
+
+model MessageEmbedding {
+  id        String   @id @default(uuid())
+  messageId String   @unique
+  message   Message  @relation(fields: [messageId], references: [id])
+  vector    Bytes    // Store the embedding vector
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([messageId])
 }
 
 model Reaction {

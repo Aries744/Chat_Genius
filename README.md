@@ -1,6 +1,6 @@
 # Chat Genius
 
-A real-time chat application with features like message threading, file sharing, and emoji reactions.
+A real-time chat application with AI-powered assistance, message threading, file sharing, and emoji reactions.
 
 ## Project Structure
 
@@ -99,6 +99,7 @@ chat_genius/
 
 ## Features
 
+### Core Functionality
 - Real-time messaging
 - Message threading
 - File sharing (images, documents)
@@ -106,6 +107,58 @@ chat_genius/
 - User authentication
 - Persistent storage
 - Mobile-responsive design
+
+### AI Integration
+- AI-powered chat assistance
+- Semantic search capabilities
+- Context-aware responses
+- Real-time feedback
+- Automatic thread management
+
+### User Experience
+- Loading indicators
+- Smooth transitions
+- Automatic thread opening
+- Clear visual feedback
+- Touch-friendly interface
+
+### RAG Pipeline
+- OpenAI integration
+- Vector similarity search
+- Message embedding storage
+- Context preservation
+- Real-time processing
+
+## Environment Setup
+
+In addition to the basic setup, you'll need:
+
+1. OpenAI API key for AI functionality:
+   ```bash
+   OPENAI_API_KEY=your-key-here
+   OPENAI_MODEL=gpt-4-turbo-preview
+   OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+   ```
+
+2. Pinecone account for vector storage:
+   ```bash
+   PINECONE_API_KEY=your-key-here
+   PINECONE_ENVIRONMENT=your-environment
+   PINECONE_INDEX=chatgenius
+   ```
+
+## Usage
+
+### Basic Chat
+- Send messages in real-time
+- Create threads for discussions
+- Share files and reactions
+
+### AI Assistant
+- Use `/askAI` command followed by your question
+- Get context-aware responses
+- View responses in threaded format
+- Real-time processing feedback
 
 ## License
 

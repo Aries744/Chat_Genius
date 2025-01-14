@@ -126,6 +126,12 @@ function setupSocketListeners() {
     socket.on('chat message', (data) => {
         console.log('Received message:', data);
         if (data.channelId === currentChannel) {
+            // Remove loading indicator if exists
+            const loadingIndicator = document.querySelector('.loading');
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+            
             addMessage(data.message);
             // Scroll to bottom on new message
             const messagesDiv = document.getElementById('messages');
@@ -161,6 +167,11 @@ function setupSocketListeners() {
     });
 
     socket.on('thread_updated', (data) => {
+        // Auto-open thread if it's an AI response
+        if (data.reply.text.startsWith('AI Response:')) {
+            openThread(data.parentId);
+        }
+        
         // Update thread view if open
         if (currentThreadId === data.parentId) {
             addThreadMessage(data.reply);
@@ -289,6 +300,20 @@ document.getElementById('message-form').addEventListener('submit', (e) => {
     
     if (message && socket && currentChannel) {
         console.log('Sending message to channel:', currentChannel);
+        
+        // Show loading indicator if it's an AI query
+        if (message.startsWith('/askAI ')) {
+            const loadingMessage = document.createElement('div');
+            loadingMessage.className = 'message loading';
+            loadingMessage.innerHTML = `
+                <div class="loading-indicator">
+                    <div class="loading-spinner"></div>
+                    <span>AI is thinking...</span>
+                </div>
+            `;
+            document.getElementById('messages').appendChild(loadingMessage);
+        }
+        
         socket.emit('chat message', {
             channelId: currentChannel,
             text: message
