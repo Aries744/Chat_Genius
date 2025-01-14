@@ -1,14 +1,30 @@
 # RAG Pipeline Feature
 
 ## Overview
-The Retrieval Augmented Generation (RAG) pipeline enhances the chat application with AI-powered assistance. It combines the power of OpenAI's language models with a semantic search over the chat history to provide contextually relevant responses.
+The Retrieval Augmented Generation (RAG) pipeline enhances the chat application with AI-powered assistance. It combines OpenAI's language models with a dual-database approach for semantic search and message storage, enabling contextually aware responses based on chat history.
 
-## Implementation
+## Architecture
 
-### 1. Database Schema
+### 1. Dual Database System
+- **PostgreSQL**: Primary database storing complete message data and embeddings
+- **Pinecone**: Specialized vector database optimized for similarity search
+- **Rationale**: This dual approach provides both robust data persistence and efficient semantic search capabilities
+
+### 2. Database Schema
 ```prisma
 model Message {
-    // ... existing fields ...
+    id        String   @id @default(uuid())
+    text      String
+    userId    String
+    channelId String
+    parentId  String?  // For threaded conversations
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    user      User     @relation(fields: [userId], references: [id])
+    channel   Channel  @relation(fields: [channelId], references: [id])
+    parent    Message? @relation("Replies", fields: [parentId], references: [id])
+    replies   Message[] @relation("Replies")
+    reactions Reaction[]
     embedding MessageEmbedding?
 }
 
@@ -24,34 +40,34 @@ model MessageEmbedding {
 }
 ```
 
-### 2. Vector Database Setup (`lib/rag.js`)
+### 3. Vector Database Setup (`lib/rag.js`)
 ```javascript
 import { OpenAI } from 'openai';
 import { Pinecone } from '@pinecone-database/pinecone';
 
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENAI_API_KEY
 });
 
 const pinecone = new Pinecone({
     apiKey: process.env.PINECONE_API_KEY
 });
 
-const index = pinecone.index(process.env.PINECONE_INDEX);
+const index = pinecone.Index(process.env.PINECONE_INDEX);
 ```
 
-### 3. Message Processing
+### 4. Message Processing Pipeline
 ```javascript
 // Generate embedding for a message
 async function generateEmbedding(text) {
     const response = await openai.embeddings.create({
         input: text,
-        model: process.env.OPENAI_EMBEDDING_MODEL,
+        model: "text-embedding-3-small"
     });
     return response.data[0].embedding;
 }
 
-// Store message embedding
+// Store message embedding in both databases
 export async function storeMessageEmbedding(messageId) {
     const message = await prisma.message.findUnique({
         where: { id: messageId },
@@ -60,7 +76,7 @@ export async function storeMessageEmbedding(messageId) {
 
     const embedding = await generateEmbedding(message.text);
 
-    // Store in Pinecone
+    // Store in Pinecone for semantic search
     await index.upsert([{
         id: messageId,
         values: embedding,
@@ -71,7 +87,7 @@ export async function storeMessageEmbedding(messageId) {
         }
     }]);
 
-    // Store in PostgreSQL
+    // Store in PostgreSQL for data persistence
     await prisma.messageEmbedding.create({
         data: {
             messageId: message.id,
@@ -81,67 +97,93 @@ export async function storeMessageEmbedding(messageId) {
 }
 ```
 
-### 4. Query Processing
+### 5. Query Processing
 ```javascript
-// Query similar messages
+// Find similar messages using vector similarity
 export async function querySimilarMessages(query, limit = 5) {
     const queryEmbedding = await generateEmbedding(query);
     
-    return await index.query({
+    const results = await index.query({
         vector: queryEmbedding,
         topK: limit,
         includeMetadata: true
     });
+
+    return results.matches;
 }
 
-// Generate AI response
+// Generate AI response with context
 export async function generateAIResponse(query, similarMessages) {
     const context = similarMessages
-        .map(m => `${m.message.username}: ${m.message.text}`)
+        .map(m => `${m.metadata.username}: ${m.metadata.text}`)
         .join('\n');
 
     const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL,
+        model: "gpt-4-turbo-preview",
         messages: [
             {
                 role: 'system',
-                content: 'You are a helpful AI assistant in a chat application.'
+                content: 'You are a helpful AI assistant in a chat application. Use the provided context to give accurate and relevant responses.'
             },
             {
                 role: 'user',
-                content: `Context:\n${context}\n\nQuestion: ${query}`
+                content: `Context from chat history:\n${context}\n\nQuestion: ${query}`
             }
         ],
         temperature: 0.7,
         max_tokens: 500
     });
 
-    return response.choices[0].message.content;
+    return {
+        response: response.choices[0].message.content,
+        context: context
+    };
 }
 ```
 
-### 5. Socket.IO Integration
+### 6. Socket.IO Integration
 ```javascript
 socket.on('chat message', async (msg) => {
     if (msg.text.startsWith('/askAI ')) {
         const query = msg.text.slice(7).trim();
-        const { response, context } = await handleRAGQuery(query);
         
-        // Create AI response message
-        const aiMessage = await prisma.message.create({
+        // Create user's question message
+        const questionMessage = await prisma.message.create({
             data: {
-                text: `AI Response: ${response}\n\nBased on:\n${context}`,
+                text: msg.text,
                 userId: socket.userId,
                 channelId: msg.channelId
             }
         });
+        io.to(msg.channelId).emit('chat message', questionMessage);
 
+        // Process RAG query
+        const similarMessages = await querySimilarMessages(query);
+        const { response, context } = await generateAIResponse(query, similarMessages);
+        
+        // Create AI response as a reply
+        const aiMessage = await prisma.message.create({
+            data: {
+                text: response,
+                userId: socket.userId,
+                channelId: msg.channelId,
+                parentId: questionMessage.id  // Link as reply
+            }
+        });
+
+        // Emit both message and thread update
         io.to(msg.channelId).emit('chat message', aiMessage);
+        io.to(msg.channelId).emit('thread_updated', {
+            parentId: questionMessage.id,
+            replyCount: 1,
+            lastReply: aiMessage
+        });
+
     } else {
-        // Regular message handling
+        // Handle regular message
         const message = await prisma.message.create({/*...*/});
-        // Store embedding for future queries
-        storeMessageEmbedding(message.id);
+        await storeMessageEmbedding(message.id);
+        io.to(msg.channelId).emit('chat message', message);
     }
 });
 ```
@@ -165,21 +207,30 @@ PINECONE_INDEX="chatgenius"
 - Name: chatgenius
 - Dimensions: 1536 (OpenAI embedding size)
 - Metric: Cosine similarity
-- Environment: Serverless
+- Region: us-east-1
 
 ## Usage
 
-Users can interact with the AI assistant using the `/askAI` command followed by their question:
+Users can interact with the AI assistant using the `/askAI` command:
 
 ```
-/askAI What was the conclusion about the database schema?
+/askAI what do magical creatures eat for breakfast?
 ```
 
 The system will:
-1. Generate an embedding for the query
-2. Find similar messages in the chat history
-3. Use the context to generate a relevant response
-4. Include source messages for reference
+1. Store the user's question
+2. Generate an embedding for the query
+3. Find similar messages in chat history
+4. Generate a contextual response
+5. Post the response as a reply in the thread
+
+## Testing
+
+Test the RAG pipeline functionality:
+```bash
+npm run test:rag      # Test full RAG pipeline
+npm run test:openai   # Test OpenAI integration
+```
 
 ## Error Handling
 
@@ -202,30 +253,30 @@ The system will:
 
 1. **Embedding Generation**
    - Batch processing for multiple messages
-   - Caching frequently accessed embeddings
    - Asynchronous processing
+   - Efficient vector storage
 
 2. **Vector Search**
-   - Optimal `topK` parameter tuning
+   - Optimal similarity threshold
    - Metadata filtering
    - Index optimization
 
 3. **Response Generation**
    - Context window optimization
    - Temperature and token limit tuning
-   - Response caching for similar queries
+   - Thread-based response organization
 
 ## Security Considerations
 
 1. **API Key Protection**
-   - Secure key storage
-   - Key rotation
+   - Secure key storage in environment variables
+   - Regular key rotation
    - Access logging
 
 2. **Data Privacy**
    - Message content filtering
    - User data protection
-   - Embedding storage security
+   - Secure embedding storage
 
 3. **Request Validation**
    - Input sanitization
