@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
@@ -130,6 +131,7 @@ app.post('/api/register', async (req, res) => {
 
 // Login endpoint
 app.post('/api/login', async (req, res) => {
+    console.log('Login request received:', req.body);
     try {
         const { username, password } = req.body;
         
@@ -137,19 +139,26 @@ app.post('/api/login', async (req, res) => {
             where: { username }
         });
 
+        console.log('User found:', user ? 'yes' : 'no');
+
         if (!user || user.isGuest) {
+            console.log('Invalid credentials: user not found or is guest');
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
         const validPassword = await bcrypt.compare(password, user.password);
+        console.log('Password valid:', validPassword);
+        
         if (!validPassword) {
+            console.log('Invalid credentials: wrong password');
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
         const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
+        console.log('Login successful for user:', username);
         res.json({ token, username: user.username });
     } catch (error) {
-        console.error('Login error:', error);
+        console.error('Login error details:', error);
         res.status(500).json({ message: 'Error logging in' });
     }
 });
@@ -251,13 +260,10 @@ io.on('connection', async (socket) => {
     try {
         console.log('User connected:', socket.username);
         
-        // Get all users
-        const users = await prisma.user.findMany({
-            select: {
-                id: true,
-                username: true,
-                isGuest: true
-            }
+        // Broadcast user online status
+        io.emit('user status', {
+            userId: socket.userId,
+            isOnline: true
         });
 
         // Join user's channels
@@ -326,16 +332,22 @@ io.on('connection', async (socket) => {
 
             console.log('Sending initial messages:', messages.length);
             
+            // Get all users
+            const users = await prisma.user.findMany({
+                select: {
+                    id: true,
+                    username: true,
+                    isGuest: true
+                }
+            });
+
             socket.emit('initialize', {
                 channels,
                 currentUser: {
                     id: socket.userId,
                     username: socket.username
                 },
-                users: users.map(user => ({
-                    ...user,
-                    isOnline: true // We'll assume all users are online initially
-                })),
+                users,
                 messages: messages.map(msg => ({
                     ...msg,
                     username: msg.user.username,
@@ -347,14 +359,6 @@ io.on('connection', async (socket) => {
                         return acc;
                     }, {})
                 }))
-            });
-
-            // Notify others that user has connected
-            socket.broadcast.emit('user joined', {
-                id: socket.userId,
-                username: socket.username,
-                isGuest: socket.username.startsWith('guest_'),
-                isOnline: true
             });
         }
 
@@ -567,123 +571,6 @@ io.on('connection', async (socket) => {
             }
         });
 
-        // Add message deletion handler
-        socket.on('delete message', async (data) => {
-            try {
-                const { messageId } = data;
-                
-                // Check if user owns the message
-                const message = await prisma.message.findUnique({
-                    where: { id: messageId },
-                    include: { user: true }
-                });
-
-                if (!message || message.userId !== socket.userId) {
-                    socket.emit('error', { message: 'Not authorized to delete this message' });
-                    return;
-                }
-
-                // Delete the message and its reactions
-                await prisma.reaction.deleteMany({
-                    where: { messageId }
-                });
-
-                // Delete any replies if this is a parent message
-                if (!message.parentId) {
-                    await prisma.message.deleteMany({
-                        where: { parentId: messageId }
-                    });
-                }
-
-                // Delete the message itself
-                await prisma.message.delete({
-                    where: { id: messageId }
-                });
-
-                // Notify all clients about the deletion
-                io.to(message.channelId).emit('message deleted', {
-                    messageId,
-                    parentId: message.parentId
-                });
-
-            } catch (error) {
-                console.error('Error deleting message:', error);
-                socket.emit('error', { message: 'Failed to delete message' });
-            }
-        });
-
-        // Add message editing handler
-        socket.on('edit message', async (data) => {
-            try {
-                const { messageId, newText } = data;
-                
-                // Check if user owns the message
-                const message = await prisma.message.findUnique({
-                    where: { id: messageId },
-                    include: { 
-                        user: true,
-                        reactions: {
-                            include: { user: true }
-                        }
-                    }
-                });
-
-                if (!message || message.userId !== socket.userId) {
-                    socket.emit('error', { message: 'Not authorized to edit this message' });
-                    return;
-                }
-
-                // Store edit history
-                await prisma.messageEdit.create({
-                    data: {
-                        messageId: message.id,
-                        oldText: message.text,
-                        newText: newText,
-                        editedBy: socket.userId
-                    }
-                });
-
-                // Update the message
-                const updatedMessage = await prisma.message.update({
-                    where: { id: messageId },
-                    data: {
-                        text: newText,
-                        editedAt: new Date()
-                    },
-                    include: {
-                        user: true,
-                        reactions: {
-                            include: { user: true }
-                        }
-                    }
-                });
-
-                // Format reactions for the response
-                const formattedReactions = updatedMessage.reactions.reduce((acc, reaction) => {
-                    if (!acc[reaction.emoji]) {
-                        acc[reaction.emoji] = [];
-                    }
-                    acc[reaction.emoji].push(reaction.user.username);
-                    return acc;
-                }, {});
-
-                // Prepare the message for broadcast
-                const messageToSend = {
-                    ...updatedMessage,
-                    username: updatedMessage.user.username,
-                    reactions: formattedReactions,
-                    isEdited: true
-                };
-
-                // Notify all clients about the edit
-                io.to(message.channelId).emit('message updated', messageToSend);
-
-            } catch (error) {
-                console.error('Error editing message:', error);
-                socket.emit('error', { message: 'Failed to edit message' });
-            }
-        });
-
         // Thread handling
         socket.on('get thread', async (data) => {
             try {
@@ -750,8 +637,8 @@ io.on('connection', async (socket) => {
 
         // Cleanup on disconnect
         socket.on('disconnect', async () => {
-            // Notify others that user has disconnected
-            socket.broadcast.emit('user status', {
+            // Broadcast user offline status
+            io.emit('user status', {
                 userId: socket.userId,
                 isOnline: false
             });
