@@ -170,18 +170,21 @@ function addMessage(message) {
 - Message history preservation
 - Real-time updates
 - Message threading support
+- Message deletion (owner only)
 
 ### 2. Direct Messages
 - Private one-on-one communication
 - Separate message history
 - Real-time delivery
 - Online status indication
+- Message deletion support
 
 ### 3. Message Threading
 - Reply to specific messages
 - Thread view
 - Reply count tracking
 - Real-time thread updates
+- Cascade deletion of replies
 
 ### 4. Message Display
 - Username display
@@ -189,6 +192,15 @@ function addMessage(message) {
 - Reaction support
 - Thread indicators
 - File attachments
+- Delete button (owner only)
+- Hover interactions
+
+### 5. User List
+- Real-time online status
+- User filtering (excludes current user)
+- Guest user indication
+- Click to start DM
+- Status indicators (online/offline)
 
 ## Message Flow
 
@@ -222,31 +234,71 @@ function addMessage(message) {
    Both users receive update
    ```
 
+3. **Message Deletion**
+   ```
+   User clicks delete button
+   ↓
+   Confirmation dialog
+   ↓
+   Socket.emit('delete message')
+   ↓
+   Server verifies ownership
+   ↓
+   Server deletes message and reactions
+   ↓
+   Server deletes thread replies (if parent)
+   ↓
+   Server broadcasts deletion
+   ↓
+   All users remove message
+   ```
+
 ## Storage Management
 
 1. **Message Storage**
-   - In-memory Map structure
+   - PostgreSQL database storage
    - Channel-based organization
-   - 50 message limit per channel
    - Thread preservation logic
+   - Reaction storage
+   - Cascade deletion support
 
 2. **Channel Organization**
    - Public channels
    - DM channels (user1-user2 format)
    - Message threading structure
+   - User presence tracking
+
+## User Management
+
+1. **User List**
+   - Real-time user status updates
+   - Automatic filtering
+   - Guest user handling
+   - Direct message initiation
+   - Status broadcasting
+
+2. **Status Updates**
+   - Connection events
+   - Disconnection handling
+   - Status broadcasting
+   - Online/offline indicators
+   - Real-time updates
 
 ## Limitations
 
-1. **Persistence**
-   - In-memory storage only
-   - Messages lost on server restart
-   - No message backup
-
-2. **Features**
+1. **Message Management**
    - No message editing
-   - No message deletion
+   - No scheduled deletion
+   - No message pinning
    - No read receipts
    - No typing indicators
+
+2. **User Features**
+   - Basic status indicators
+   - No user profiles
+   - No user groups
+   - No user roles
+   - No user blocking
 
 3. **Performance**
    - Limited message history
@@ -257,27 +309,40 @@ function addMessage(message) {
 
 1. **Message Features**
    - Message editing
-   - Message deletion
+   - Scheduled deletion
    - Read receipts
    - Typing indicators
    - Rich text formatting
    - Code snippet support
    - Link previews
+   - Message pinning
 
-2. **Performance**
+2. **User Features**
+   - Enhanced user profiles
+   - User roles and permissions
+   - User groups
+   - User blocking
+   - Status messages
+   - User search
+   - Last seen time
+
+3. **Performance**
    - Message pagination
    - Lazy loading
    - Message caching
    - Optimistic updates
 
-3. **Storage**
-   - Persistent database
+4. **Storage**
    - Message backup
    - Message search
    - Message analytics
+   - User analytics
 
-4. **User Experience**
+5. **User Experience**
    - Offline support
    - Message queuing
    - Delivery confirmation
-   - Message scheduling 
+   - Message scheduling
+   - Enhanced status indicators
+   - User typing preview
+   - Read receipts 

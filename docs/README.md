@@ -2,13 +2,13 @@
 
 ## Overview
 
-This documentation covers the implementation details, features, and setup instructions for the Chat Genius application, including its AI-powered chat assistance capabilities.
+This documentation covers the implementation details, features, and setup instructions for the Chat Genius application, including its AI-powered chat assistance capabilities, message management, and user presence features.
 
 ## Project Organization
 
 - `docs/features/` - Detailed documentation for each feature:
   - `1-Authentication.md` - User authentication and session management
-  - `2-RealTimeMessaging.md` - Socket.IO implementation for real-time chat
+  - `2-RealTimeMessaging.md` - Socket.IO implementation for real-time chat, message deletion, and user presence
   - `3-FileSharing.md` - File upload and sharing functionality
   - `4-EmojiReactions.md` - Emoji reaction system
   - `5-MessageThreading.md` - Thread-based conversations
@@ -56,6 +56,8 @@ The application uses a dual-database approach:
    - Stores messages, users, channels, and embeddings
    - Schema defined in `prisma/schema.prisma`
    - Migrations in `prisma/migrations/`
+   - User presence tracking
+   - Message deletion cascade
 
 2. Pinecone Vector Database:
    - Specialized storage for message embeddings
@@ -138,4 +140,7 @@ Note: The default user varies by EC2 AMI:
 - HTTPS in production
 - Regular dependency updates
 - Rate limiting on API endpoints
-- File upload restrictions 
+- File upload restrictions
+- Message ownership verification
+- Cascade deletion security
+- User presence validation 

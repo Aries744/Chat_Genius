@@ -98,6 +98,7 @@ function setupSocketListeners() {
 
     socket.on('initialize', (data) => {
         currentUser = data.currentUser;
+        allUsers = data.users || []; // Initialize allUsers with the users from server
         
         // Find the general channel and set it as current
         const generalChannel = data.channels.find(ch => ch.name === 'general');
@@ -108,6 +109,7 @@ function setupSocketListeners() {
         }
         
         updateChannelsList(data.channels);
+        updateUsersList(allUsers); // Update the users list in the UI
         
         // Display initial messages if any
         if (data.messages) {
@@ -193,6 +195,28 @@ function setupSocketListeners() {
         });
         
         threadMessages.scrollTop = threadMessages.scrollHeight;
+    });
+
+    // Add message deletion handler
+    socket.on('message deleted', (data) => {
+        // Remove message from main chat
+        const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
+        if (messageElement) {
+            messageElement.remove();
+        }
+
+        // If this was a parent message and thread is open, close the thread
+        if (!data.parentId && currentThreadId === data.messageId) {
+            closeThread();
+        }
+
+        // If this was a reply and its thread is open, remove it from thread view
+        if (data.parentId && currentThreadId === data.parentId) {
+            const threadMessage = document.querySelector(`#thread-messages [data-message-id="${data.messageId}"]`);
+            if (threadMessage) {
+                threadMessage.remove();
+            }
+        }
     });
 }
 
@@ -357,9 +381,16 @@ function addMessage(message) {
         }
     }
 
+    // Add delete button if user owns the message
+    const deleteButton = message.userId === currentUser.id ? 
+        `<button class="delete-btn" onclick="deleteMessage('${message.id}')">🗑️</button>` : '';
+
     messageElement.innerHTML = `
-        <span class="user">${message.username}</span>
-        <span class="time">${formatTime(message.createdAt)}</span>
+        <div class="message-header">
+            <span class="user">${message.username}</span>
+            <span class="time">${formatTime(message.createdAt)}</span>
+            ${deleteButton}
+        </div>
         <div class="text">${message.text}</div>
         ${fileAttachment}
         <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
@@ -677,9 +708,16 @@ function addThreadMessage(message) {
         }
     }
     
+    // Add delete button if user owns the message
+    const deleteButton = message.userId === currentUser.id ? 
+        `<button class="delete-btn" onclick="deleteMessage('${message.id}')">🗑️</button>` : '';
+    
     messageElement.innerHTML = `
-        <span class="user">${message.username}</span>
-        <span class="time">${formatTime(message.createdAt)}</span>
+        <div class="message-header">
+            <span class="user">${message.username}</span>
+            <span class="time">${formatTime(message.createdAt)}</span>
+            ${deleteButton}
+        </div>
         <div class="text">${message.text}</div>
         ${fileAttachment}
         <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
@@ -723,4 +761,11 @@ function updateThreadIndicator(messageId) {
     ).length;
     
     threadBtn.textContent = replyCount ? `${replyCount} replies` : 'Reply in thread';
+}
+
+// Add delete message function
+function deleteMessage(messageId) {
+    if (confirm('Are you sure you want to delete this message?')) {
+        socket.emit('delete message', { messageId });
+    }
 } 

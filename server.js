@@ -251,6 +251,15 @@ io.on('connection', async (socket) => {
     try {
         console.log('User connected:', socket.username);
         
+        // Get all users
+        const users = await prisma.user.findMany({
+            select: {
+                id: true,
+                username: true,
+                isGuest: true
+            }
+        });
+
         // Join user's channels
         const userChannels = await prisma.channelUser.findMany({
             where: { userId: socket.userId },
@@ -323,6 +332,10 @@ io.on('connection', async (socket) => {
                     id: socket.userId,
                     username: socket.username
                 },
+                users: users.map(user => ({
+                    ...user,
+                    isOnline: true // We'll assume all users are online initially
+                })),
                 messages: messages.map(msg => ({
                     ...msg,
                     username: msg.user.username,
@@ -334,6 +347,14 @@ io.on('connection', async (socket) => {
                         return acc;
                     }, {})
                 }))
+            });
+
+            // Notify others that user has connected
+            socket.broadcast.emit('user joined', {
+                id: socket.userId,
+                username: socket.username,
+                isGuest: socket.username.startsWith('guest_'),
+                isOnline: true
             });
         }
 
@@ -546,6 +567,51 @@ io.on('connection', async (socket) => {
             }
         });
 
+        // Add message deletion handler
+        socket.on('delete message', async (data) => {
+            try {
+                const { messageId } = data;
+                
+                // Check if user owns the message
+                const message = await prisma.message.findUnique({
+                    where: { id: messageId },
+                    include: { user: true }
+                });
+
+                if (!message || message.userId !== socket.userId) {
+                    socket.emit('error', { message: 'Not authorized to delete this message' });
+                    return;
+                }
+
+                // Delete the message and its reactions
+                await prisma.reaction.deleteMany({
+                    where: { messageId }
+                });
+
+                // Delete any replies if this is a parent message
+                if (!message.parentId) {
+                    await prisma.message.deleteMany({
+                        where: { parentId: messageId }
+                    });
+                }
+
+                // Delete the message itself
+                await prisma.message.delete({
+                    where: { id: messageId }
+                });
+
+                // Notify all clients about the deletion
+                io.to(message.channelId).emit('message deleted', {
+                    messageId,
+                    parentId: message.parentId
+                });
+
+            } catch (error) {
+                console.error('Error deleting message:', error);
+                socket.emit('error', { message: 'Failed to delete message' });
+            }
+        });
+
         // Thread handling
         socket.on('get thread', async (data) => {
             try {
@@ -612,6 +678,12 @@ io.on('connection', async (socket) => {
 
         // Cleanup on disconnect
         socket.on('disconnect', async () => {
+            // Notify others that user has disconnected
+            socket.broadcast.emit('user status', {
+                userId: socket.userId,
+                isOnline: false
+            });
+
             if (socket.username.startsWith('guest_')) {
                 try {
                     await prisma.user.delete({

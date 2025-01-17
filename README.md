@@ -1,6 +1,6 @@
 # Chat Genius
 
-A real-time chat application with AI-powered assistance, message threading, file sharing, and emoji reactions.
+A real-time chat application with AI-powered assistance, message threading, file sharing, emoji reactions, and message management features.
 
 ## Project Structure
 
@@ -107,6 +107,23 @@ chat_genius/
 - User authentication
 - Persistent storage
 - Mobile-responsive design
+- Message deletion (owner only)
+- User presence tracking
+
+### Message Management
+- Delete own messages
+- Cascade deletion for threads
+- Confirmation dialogs
+- Real-time deletion updates
+- Reaction cleanup
+
+### User Features
+- Real-time user list
+- Online/offline status
+- Guest user support
+- Direct messaging
+- User filtering
+- Status indicators
 
 ### AI Integration
 - AI-powered chat assistance
@@ -121,6 +138,8 @@ chat_genius/
 - Automatic thread opening
 - Clear visual feedback
 - Touch-friendly interface
+- Hover interactions
+- Confirmation dialogs
 
 ### RAG Pipeline
 - OpenAI integration
@@ -153,6 +172,8 @@ In addition to the basic setup, you'll need:
 - Send messages in real-time
 - Create threads for discussions
 - Share files and reactions
+- Delete your messages
+- View online users
 
 ### AI Assistant
 - Use `/askAI` command followed by your question
