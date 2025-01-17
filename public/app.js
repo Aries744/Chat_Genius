@@ -218,6 +218,23 @@ function setupSocketListeners() {
             }
         }
     });
+
+    // Add socket listener for message updates
+    socket.on('message updated', (message) => {
+        const messageElement = document.querySelector(`[data-message-id="${message.id}"]`);
+        if (!messageElement) return;
+
+        const textElement = messageElement.querySelector('[data-message-text]');
+        const timeElement = messageElement.querySelector('.time');
+        
+        textElement.textContent = message.text;
+        timeElement.textContent = `${formatTime(message.createdAt)} (edited)`;
+        
+        // Update reactions if they changed
+        if (message.reactions) {
+            updateMessageReactions(message.id, message.reactions);
+        }
+    });
 }
 
 function updateChannelsList(channels) {
@@ -381,17 +398,28 @@ function addMessage(message) {
         }
     }
 
-    // Add delete button if user owns the message
-    const deleteButton = message.userId === currentUser.id ? 
-        `<button class="delete-btn" onclick="deleteMessage('${message.id}')">🗑️</button>` : '';
+    // Add action buttons if user owns the message
+    const actionButtons = message.userId === currentUser.id ? `
+        <button class="edit-btn" onclick="startEditing('${message.id}')">✏️</button>
+        <button class="delete-btn" onclick="deleteMessage('${message.id}')">🗑️</button>
+    ` : '';
 
     messageElement.innerHTML = `
         <div class="message-header">
             <span class="user">${message.username}</span>
-            <span class="time">${formatTime(message.createdAt)}</span>
-            ${deleteButton}
+            <span class="time">${formatTime(message.createdAt)}${message.editedAt ? ' (edited)' : ''}</span>
+            <div class="message-actions">
+                ${actionButtons}
+            </div>
         </div>
-        <div class="text">${message.text}</div>
+        <div class="text" data-message-text>${message.text}</div>
+        <div class="edit-container" style="display: none;">
+            <textarea class="edit-input">${message.text}</textarea>
+            <div class="edit-buttons">
+                <button class="save-edit-btn" onclick="saveEdit('${message.id}')">Save</button>
+                <button class="cancel-edit-btn" onclick="cancelEdit('${message.id}')">Cancel</button>
+            </div>
+        </div>
         ${fileAttachment}
         <button class="add-reaction-btn" onclick="showEmojiPicker('${message.id}', event)">😊</button>
         <div class="message-reactions"></div>
@@ -767,5 +795,54 @@ function updateThreadIndicator(messageId) {
 function deleteMessage(messageId) {
     if (confirm('Are you sure you want to delete this message?')) {
         socket.emit('delete message', { messageId });
+    }
+}
+
+// Add message editing functions
+function startEditing(messageId) {
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) return;
+
+    const textElement = messageElement.querySelector('[data-message-text]');
+    const editContainer = messageElement.querySelector('.edit-container');
+    const editInput = messageElement.querySelector('.edit-input');
+
+    textElement.style.display = 'none';
+    editContainer.style.display = 'block';
+    editInput.value = textElement.textContent;
+    editInput.focus();
+
+    // Add escape key listener
+    editInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            cancelEdit(messageId);
+        }
+    });
+}
+
+function cancelEdit(messageId) {
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) return;
+
+    const textElement = messageElement.querySelector('[data-message-text]');
+    const editContainer = messageElement.querySelector('.edit-container');
+
+    textElement.style.display = 'block';
+    editContainer.style.display = 'none';
+}
+
+function saveEdit(messageId) {
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) return;
+
+    const editInput = messageElement.querySelector('.edit-input');
+    const newText = editInput.value.trim();
+
+    if (newText) {
+        socket.emit('edit message', {
+            messageId,
+            newText
+        });
+        cancelEdit(messageId);
     }
 } 

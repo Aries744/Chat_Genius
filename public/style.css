@@ -579,4 +579,95 @@ button:hover {
 
 .chat-container.thread-closed {
     margin-right: 0;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.message-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.message:hover .message-actions {
+    opacity: 1;
+}
+
+.edit-btn, .delete-btn {
+    padding: 2px 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    font-size: 16px;
+}
+
+.edit-btn:hover {
+    opacity: 1;
+    color: #3498db;
+}
+
+.delete-btn:hover {
+    opacity: 1;
+    color: #e74c3c;
+}
+
+.edit-container {
+    margin: 8px 0;
+}
+
+.edit-input {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    resize: vertical;
+    margin-bottom: 8px;
+}
+
+.edit-input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.edit-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.save-edit-btn, .cancel-edit-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.save-edit-btn {
+    background-color: #3498db;
+    color: white;
+}
+
+.save-edit-btn:hover {
+    background-color: #2980b9;
+}
+
+.cancel-edit-btn {
+    background-color: #95a5a6;
+    color: white;
+}
+
+.cancel-edit-btn:hover {
+    background-color: #7f8c8d;
 } 

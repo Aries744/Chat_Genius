@@ -612,6 +612,78 @@ io.on('connection', async (socket) => {
             }
         });
 
+        // Add message editing handler
+        socket.on('edit message', async (data) => {
+            try {
+                const { messageId, newText } = data;
+                
+                // Check if user owns the message
+                const message = await prisma.message.findUnique({
+                    where: { id: messageId },
+                    include: { 
+                        user: true,
+                        reactions: {
+                            include: { user: true }
+                        }
+                    }
+                });
+
+                if (!message || message.userId !== socket.userId) {
+                    socket.emit('error', { message: 'Not authorized to edit this message' });
+                    return;
+                }
+
+                // Store edit history
+                await prisma.messageEdit.create({
+                    data: {
+                        messageId: message.id,
+                        oldText: message.text,
+                        newText: newText,
+                        editedBy: socket.userId
+                    }
+                });
+
+                // Update the message
+                const updatedMessage = await prisma.message.update({
+                    where: { id: messageId },
+                    data: {
+                        text: newText,
+                        editedAt: new Date()
+                    },
+                    include: {
+                        user: true,
+                        reactions: {
+                            include: { user: true }
+                        }
+                    }
+                });
+
+                // Format reactions for the response
+                const formattedReactions = updatedMessage.reactions.reduce((acc, reaction) => {
+                    if (!acc[reaction.emoji]) {
+                        acc[reaction.emoji] = [];
+                    }
+                    acc[reaction.emoji].push(reaction.user.username);
+                    return acc;
+                }, {});
+
+                // Prepare the message for broadcast
+                const messageToSend = {
+                    ...updatedMessage,
+                    username: updatedMessage.user.username,
+                    reactions: formattedReactions,
+                    isEdited: true
+                };
+
+                // Notify all clients about the edit
+                io.to(message.channelId).emit('message updated', messageToSend);
+
+            } catch (error) {
+                console.error('Error editing message:', error);
+                socket.emit('error', { message: 'Failed to edit message' });
+            }
+        });
+
         // Thread handling
         socket.on('get thread', async (data) => {
             try {

@@ -17,6 +17,7 @@ model User {
   channels  ChannelUser[]
   messages  Message[]
   reactions Reaction[]
+  edits     MessageEdit[]
 }
 
 model Channel {
@@ -40,7 +41,7 @@ model ChannelUser {
 }
 
 model Message {
-  id        String     @id @default(uuid())
+  id        String        @id @default(uuid())
   text      String
   userId    String
   channelId String
@@ -48,14 +49,29 @@ model Message {
   fileUrl   String?
   fileType  String?
   fileName  String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  channel   Channel    @relation(fields: [channelId], references: [id])
-  parent    Message?   @relation("ThreadReplies", fields: [parentId], references: [id])
-  replies   Message[]  @relation("ThreadReplies")
-  user      User       @relation(fields: [userId], references: [id])
+  user      User         @relation(fields: [userId], references: [id])
+  channel   Channel      @relation(fields: [channelId], references: [id])
+  parent    Message?     @relation("Replies", fields: [parentId], references: [id])
+  replies   Message[]    @relation("Replies")
   reactions Reaction[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  editedAt  DateTime?
+  editHistory MessageEdit[]
   embedding MessageEmbedding?
+}
+
+model MessageEdit {
+  id        String   @id @default(uuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id])
+  oldText   String
+  newText   String
+  editedAt  DateTime @default(now())
+  editedBy  String
+  user      User     @relation(fields: [editedBy], references: [id])
+
+  @@index([messageId])
 }
 
 model MessageEmbedding {

@@ -1,186 +1,117 @@
 # Chat Genius
 
-A real-time chat application with AI-powered assistance, message threading, file sharing, emoji reactions, and message management features.
-
-## Project Structure
-
-```
-chat_genius/
-├── deployment/           # Project-specific deployment files (gitignored)
-│   ├── keys/            # SSH keys (400 permissions)
-│   └── aws/             # AWS credentials (600 permissions)
-├── docs/                # Detailed documentation
-│   ├── features/        # Feature-specific documentation
-│   └── README.md        # Documentation overview
-├── prisma/              # Database schema and migrations
-├── public/              # Client-side assets and code
-│   └── uploads/         # User uploaded files (gitignored)
-├── .env                 # Environment variables (gitignored)
-├── .env.example         # Template for environment setup
-└── server.js            # Main application file
-```
-
-## Prerequisites
-
-- Node.js (v14 or higher)
-- PostgreSQL (v14 or higher)
-- PM2 (for production)
-
-## Local Development Setup
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Aries744/Chat_Genius.git
-   cd Chat_Genius
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your values
-   ```
-
-4. Set up the database:
-   ```bash
-   npx prisma migrate dev
-   ```
-
-5. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-## Production Deployment (AWS EC2)
-
-1. SSH into your EC2 instance:
-   ```bash
-   # SSH key should be in deployment/keys/ with 400 permissions
-   ssh -i deployment/keys/deploy2.pem ec2-user@[EC2-IP]
-   ```
-
-2. Clone and set up the application:
-   ```bash
-   git clone https://github.com/Aries744/Chat_Genius.git
-   cd Chat_Genius
-   npm install
-   ```
-
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env with production values
-   ```
-
-4. Set up the database:
-   ```bash
-   npx prisma migrate deploy
-   ```
-
-5. Start with PM2:
-   ```bash
-   pm2 start server.js --name chat-app
-   pm2 save
-   ```
-
-## Security Notes
-
-- Keep `.env` and files in `deployment/` secure and never commit them
-- Maintain proper file permissions:
-  - SSH keys: 400 (read-only for owner)
-  - AWS credentials: 600 (read/write for owner only)
-  - Uploads directory: 755
-- Use HTTPS in production
-- Regularly update dependencies
+A modern real-time chat application with advanced messaging features, user presence tracking, and AI integration.
 
 ## Features
 
-### Core Functionality
-- Real-time messaging
-- Message threading
-- File sharing (images, documents)
-- Emoji reactions
-- User authentication
-- Persistent storage
-- Mobile-responsive design
-- Message deletion (owner only)
-- User presence tracking
-
 ### Message Management
-- Delete own messages
-- Cascade deletion for threads
-- Confirmation dialogs
-- Real-time deletion updates
-- Reaction cleanup
+- Real-time message delivery and updates
+- Message editing with edit history tracking
+- Message deletion with cascade deletion for threads
+- Visual indicators for edited messages
+- Confirmation dialogs for destructive actions
+- Hover interactions for message actions
 
 ### User Features
-- Real-time user list
-- Online/offline status
+- Real-time user list with online/offline status
 - Guest user support
 - Direct messaging
-- User filtering
+- User filtering (excludes current user)
 - Status indicators
+- Automatic status updates
+
+### Channel Management
+- Public channels
+- Direct message channels
+- Channel switching
+- Message threading
+- File sharing support
+
+### Message Interactions
+- Emoji reactions
+- Message threading
+- File attachments
+- Message search
+- Real-time updates
 
 ### AI Integration
-- AI-powered chat assistance
-- Semantic search capabilities
-- Context-aware responses
-- Real-time feedback
-- Automatic thread management
-
-### User Experience
-- Loading indicators
-- Smooth transitions
-- Automatic thread opening
-- Clear visual feedback
-- Touch-friendly interface
-- Hover interactions
+- AI-powered responses
+- RAG pipeline for context-aware replies
+- Hover interactions for AI features
 - Confirmation dialogs
 
-### RAG Pipeline
-- OpenAI integration
-- Vector similarity search
-- Message embedding storage
-- Context preservation
-- Real-time processing
+## Getting Started
 
-## Environment Setup
+### Prerequisites
+- Node.js (v14 or higher)
+- PostgreSQL
+- npm or yarn
 
-In addition to the basic setup, you'll need:
+### Installation
 
-1. OpenAI API key for AI functionality:
-   ```bash
-   OPENAI_API_KEY=your-key-here
-   OPENAI_MODEL=gpt-4-turbo-preview
-   OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-   ```
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/chat-genius.git
+cd chat-genius
+```
 
-2. Pinecone account for vector storage:
-   ```bash
-   PINECONE_API_KEY=your-key-here
-   PINECONE_ENVIRONMENT=your-environment
-   PINECONE_INDEX=chatgenius
-   ```
+2. Install dependencies:
+```bash
+npm install
+```
 
-## Usage
+3. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
 
-### Basic Chat
-- Send messages in real-time
-- Create threads for discussions
-- Share files and reactions
-- Delete your messages
-- View online users
+4. Initialize the database:
+```bash
+npx prisma migrate dev
+```
 
-### AI Assistant
-- Use `/askAI` command followed by your question
-- Get context-aware responses
-- View responses in threaded format
-- Real-time processing feedback
+5. Start the development server:
+```bash
+npm run dev
+```
+
+The application will be available at `http://localhost:3000`.
+
+## Development
+
+### Database Schema
+The application uses Prisma with PostgreSQL. Key models include:
+- User (authentication, profile)
+- Channel (messaging groups)
+- Message (content, threading)
+- Reaction (emoji interactions)
+- MessageEdit (edit history)
+
+### Architecture
+- Backend: Node.js with Express
+- Real-time: Socket.IO
+- Database: PostgreSQL with Prisma
+- Frontend: Vanilla JavaScript
+- File Storage: Local/S3 (configurable)
+
+## Security
+
+- Password hashing
+- Session management
+- Message ownership verification
+- Edit history tracking
+- Input sanitization
+- File upload validation
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-MIT License - see LICENSE file for details 
+This project is licensed under the MIT License - see the LICENSE file for details. 
