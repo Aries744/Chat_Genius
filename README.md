@@ -4,6 +4,14 @@ A modern real-time chat application with advanced messaging features, user prese
 
 ## Features
 
+### User Presence
+- Real-time user list with online/offline status
+- Automatic status updates on connect/disconnect
+- Visual status indicators
+- User filtering and search
+- Guest user support
+- Direct messaging
+
 ### Message Management
 - Real-time message delivery and updates
 - Message editing with edit history tracking
@@ -11,14 +19,6 @@ A modern real-time chat application with advanced messaging features, user prese
 - Visual indicators for edited messages
 - Confirmation dialogs for destructive actions
 - Hover interactions for message actions
-
-### User Features
-- Real-time user list with online/offline status
-- Guest user support
-- Direct messaging
-- User filtering (excludes current user)
-- Status indicators
-- Automatic status updates
 
 ### Channel Management
 - Public channels
@@ -82,7 +82,7 @@ The application will be available at `http://localhost:3000`.
 
 ### Database Schema
 The application uses Prisma with PostgreSQL. Key models include:
-- User (authentication, profile)
+- User (authentication, profile, presence)
 - Channel (messaging groups)
 - Message (content, threading)
 - Reaction (emoji interactions)

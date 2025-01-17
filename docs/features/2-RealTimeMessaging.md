@@ -23,76 +23,99 @@ Chat Genius provides robust real-time messaging capabilities using Socket.IO, en
    - Hover interactions for message actions
    - Keyboard shortcuts (Escape to cancel edit)
 
+4. **User Presence**
+   - Real-time user list updates
+   - Online/offline status tracking
+   - Automatic status updates on connect/disconnect
+   - Visual indicators for user status
+   - User filtering in channel views
+
 ### Implementation Details
 
 #### Server-Side (server.js)
 ```javascript
-// Message event handlers
-socket.on('chat message', async (data) => {
-    // Handle new message creation
-});
+// User presence tracking
+io.on('connection', async (socket) => {
+    // Broadcast user online status
+    io.emit('user status', {
+        userId: socket.userId,
+        isOnline: true
+    });
 
-socket.on('edit message', async (data) => {
-    // Verify message ownership
-    // Store edit history
-    // Update message content
-    // Broadcast to all clients
-});
+    // Initialize with user list
+    const users = await prisma.user.findMany({
+        select: {
+            id: true,
+            username: true,
+            isGuest: true
+        }
+    });
 
-socket.on('delete message', async (data) => {
-    // Verify message ownership
-    // Handle cascade deletion for threads
-    // Remove message and associated data
-    // Notify all clients
+    socket.emit('initialize', {
+        users,
+        // ... other initialization data
+    });
+
+    // Handle disconnect
+    socket.on('disconnect', () => {
+        io.emit('user status', {
+            userId: socket.userId,
+            isOnline: false
+        });
+    });
 });
 ```
 
 #### Client-Side (public/app.js)
 ```javascript
-// Message display and interaction
-socket.on('message updated', (message) => {
-    // Update message in UI
-    // Show edit indicator
-    // Update reactions if changed
+// User presence handling
+socket.on('user status', (data) => {
+    const user = allUsers.find(u => u.id === data.userId);
+    if (user) {
+        user.isOnline = data.isOnline;
+        updateUsersList(allUsers);
+    }
 });
 
-socket.on('message deleted', (data) => {
-    // Remove message from UI
-    // Handle thread cleanup if needed
-});
+// Update users list UI
+function updateUsersList(users) {
+    const usersList = document.getElementById('users-list');
+    usersList.innerHTML = '';
+    users
+        .filter(user => user.id !== currentUser.id)
+        .forEach(user => {
+            const userElement = document.createElement('div');
+            userElement.className = 'user-item';
+            userElement.innerHTML = `
+                <span class="user-status ${user.isOnline ? 'online' : 'offline'}"></span>
+                ${user.username}${user.isGuest ? ' (Guest)' : ''}
+            `;
+            usersList.appendChild(userElement);
+        });
+}
 ```
 
 ### Database Schema
 ```prisma
-model Message {
-    id          String       @id @default(uuid())
-    text        String
-    userId      String
-    channelId   String
-    editedAt    DateTime?
-    editHistory MessageEdit[]
+model User {
+    id        String    @id @default(uuid())
+    username  String    @unique
+    isGuest   Boolean   @default(false)
     // ... other fields
 }
 
-model MessageEdit {
-    id        String   @id @default(uuid())
-    messageId String
-    oldText   String
-    newText   String
-    editedAt  DateTime @default(now())
-    editedBy  String
-    // ... relations
+model Message {
+    id        String    @id @default(uuid())
+    text      String
+    userId    String
+    channelId String
+    // ... other fields
 }
 ```
 
-### Security Considerations
-- Message ownership verification for edits and deletions
-- Edit history tracking for accountability
-- Proper error handling and user feedback
-- Real-time validation of user permissions
-
-### Limitations
-- Only message owners can edit or delete messages
-- Edit history is permanent and cannot be modified
-- Deleted messages cannot be recovered
-- Thread messages are deleted when parent is deleted 
+### Event Flow
+1. User connects → Server broadcasts online status
+2. Server sends complete user list on initialization
+3. UI updates to show online/offline indicators
+4. User disconnects → Server broadcasts offline status
+5. All clients update their user lists accordingly 

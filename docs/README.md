@@ -2,13 +2,13 @@
 
 ## Overview
 
-This documentation covers the implementation details, features, and setup instructions for the Chat Genius application, including its AI-powered chat assistance capabilities, message management, and user presence features.
+This documentation covers the implementation details, features, and setup instructions for the Chat Genius application, including its user presence tracking, AI-powered chat assistance capabilities, message management, and real-time features.
 
 ## Project Organization
 
 - `docs/features/` - Detailed documentation for each feature:
   - `1-Authentication.md` - User authentication and session management
-  - `2-RealTimeMessaging.md` - Socket.IO implementation for real-time chat, message deletion, and user presence
+  - `2-RealTimeMessaging.md` - Socket.IO implementation for real-time chat, user presence, and message management
   - `3-FileSharing.md` - File upload and sharing functionality
   - `4-EmojiReactions.md` - Emoji reaction system
   - `5-MessageThreading.md` - Thread-based conversations
@@ -53,7 +53,7 @@ PINECONE_INDEX="chatgenius"
 The application uses a dual-database approach:
 1. PostgreSQL with Prisma ORM:
    - Primary database for all application data
-   - Stores messages, users, channels, and embeddings
+   - Stores users, messages, channels, and embeddings
    - Schema defined in `prisma/schema.prisma`
    - Migrations in `prisma/migrations/`
    - User presence tracking
@@ -77,6 +77,26 @@ The application uses a dual-database approach:
    - Choose cosine similarity metric
 5. Start development server: `npm run dev`
 
+## Real-Time Features
+
+The application uses Socket.IO for real-time features:
+1. User Presence:
+   - Online/offline status tracking
+   - Real-time user list updates
+   - Status broadcast on connect/disconnect
+   - Visual status indicators
+
+2. Messaging:
+   - Instant message delivery
+   - Real-time updates for edits/deletions
+   - Thread notifications
+   - Typing indicators
+
+3. Reactions:
+   - Real-time emoji reactions
+   - Reaction counts and user lists
+   - Toggle functionality
+
 ## Testing
 
 The application includes several test suites:
@@ -84,18 +104,6 @@ The application includes several test suites:
 npm run test:rag      # Test RAG pipeline functionality
 npm run test:openai   # Test OpenAI integration
 ```
-
-## Secure File Organization
-
-Sensitive files are stored in the `deployment/` directory (gitignored):
-```
-deployment/
-├── docs/     # Deployment documentation with EC2 details
-├── keys/     # SSH keys (400 permissions)
-└── aws/      # AWS credentials (600 permissions)
-```
-
-Note: These files are not committed to git for security reasons.
 
 ## Production Deployment
 
