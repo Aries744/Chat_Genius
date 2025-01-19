@@ -108,47 +108,45 @@ npm run test:openai   # Test OpenAI integration
 ## Production Deployment
 
 ### EC2 Access
-Sensitive deployment details including IP addresses, SSH keys, and access credentials are stored in:
+Production server details:
+- IP Address: 18.208.137.52
+- Region: us-east-1
+- Instance Type: t2.micro
+- OS: Amazon Linux 2023
+
+Sensitive deployment files are stored in:
 ```
-deployment/
-├── docs/     # Deployment documentation with EC2 details
-├── keys/     # SSH keys (400 permissions)
-└── aws/      # AWS credentials (600 permissions)
+aws/
+├── deploy3.pem        # SSH key (400 permissions)
+└── accessKeys.csv     # AWS credentials (600 permissions)
 ```
 
 Note: These files are not committed to git for security reasons.
 
 ### EC2 SSH Access
-- Key location: `deployment/keys/deploy2.pem`
+- Key location: `aws/deploy3.pem`
 - Key permissions: `400` (read-only for owner)
-- Default user: `ec2-user` (for Amazon Linux 2023)
-- Command format:
+- Default user: `ec2-user`
+- SSH command:
   ```bash
-  ssh -i deployment/keys/deploy2.pem ec2-user@[EC2-IP]
+  chmod 400 aws/deploy3.pem  # Set correct permissions
+  ssh -i aws/deploy3.pem ec2-user@18.208.137.52
   ```
 
-Note: The default user varies by EC2 AMI:
-- Amazon Linux 2023: `ec2-user`
-- Ubuntu: `ubuntu`
-- Amazon Linux 2: `ec2-user`
-- RHEL: `ec2-user`
-- SUSE: `ec2-user`
-- Debian: `admin`
-- Fedora: `fedora`
-
-1. SSH access: `ssh -i deployment/keys/deploy2.pem ec2-user@[EC2-IP]`
-2. Environment setup: Copy and configure `.env`
-3. Database setup: `npx prisma migrate deploy`
-4. Process management: PM2 for application lifecycle
+### Environment Setup
+1. SSH into the instance:
+   ```bash
+   ssh -i aws/deploy3.pem ec2-user@18.208.137.52
+   ```
+2. Update environment variables:
+   ```bash
+   nano .env  # Edit environment variables
+   ```
+3. Restart the application:
+   ```bash
+   pm2 restart all  # Restart all processes
+   ```
 
 ## Security Considerations
 
-- Environment variables in `.env` (never committed)
-- Secure file permissions (400 for keys, 600 for credentials)
-- HTTPS in production
-- Regular dependency updates
-- Rate limiting on API endpoints
-- File upload restrictions
-- Message ownership verification
-- Cascade deletion security
-- User presence validation 
+- Environment variables in `.env`

@@ -48,6 +48,7 @@ Thumbs.db
 aws_credentials.csv
 *aws_credentials*
 .aws/
+aws/            # AWS deployment directory
 *.pem
 deploy*.pem
 *.key
