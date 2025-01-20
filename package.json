@@ -6,7 +6,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
+    "dev:server": "nodemon server.js",
+    "dev:client": "cd client && npm run dev",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "test:rag": "node test/rag-test.js",
@@ -29,6 +31,7 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "nodemon": "^3.0.1",
     "prisma": "^5.4.2"
   }
